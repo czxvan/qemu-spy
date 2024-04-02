@@ -163,6 +163,10 @@ void translator_loop(CPUState *cpu, TranslationBlock *tb, int *max_insns,
             plugin_gen_insn_start(cpu, db);
         }
 
+#ifdef CONFIG_PLUGIN
+        plugin_gen_insn_trans(cpu, db);
+#endif
+
         /*
          * Disassemble one instruction.  The translate_insn hook should
          * update db->pc_next and db->is_jmp to indicate what should be

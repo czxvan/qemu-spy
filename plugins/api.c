@@ -55,6 +55,8 @@
 #endif
 #endif
 
+#include "qemu/qemu-plugin-spy.h"
+
 /* Uninstall and Reset handlers */
 
 void qemu_plugin_uninstall(qemu_plugin_id_t id, qemu_plugin_simple_cb_t cb)
@@ -170,6 +172,18 @@ void qemu_plugin_register_vcpu_tb_trans_cb(qemu_plugin_id_t id,
                                            qemu_plugin_vcpu_tb_trans_cb_t cb)
 {
     plugin_register_cb(id, QEMU_PLUGIN_EV_VCPU_TB_TRANS, cb);
+}
+
+void qemu_plugin_register_vcpu_insn_trans_cb(qemu_plugin_id_t id,
+                                           qemu_plugin_vcpu_insn_trans_cb_t cb)
+{
+    plugin_register_cb(id, QEMU_PLUGIN_EV_VCPU_INSN_TRANS, cb);
+}
+
+void qemu_plugin_register_vcpu_syscall_spy_cb(qemu_plugin_id_t id,
+                                           qemu_plugin_vcpu_syscall_spy_cb_t cb)
+{
+    plugin_register_cb(id, QEMU_PLUGIN_EV_VCPU_SYSCALL_SPY, cb);
 }
 
 void qemu_plugin_register_vcpu_syscall_cb(qemu_plugin_id_t id,

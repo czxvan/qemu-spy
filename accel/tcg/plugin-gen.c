@@ -958,3 +958,11 @@ void plugin_gen_tb_end(CPUState *cpu, size_t num_insns)
     /* inject the instrumentation at the appropriate places */
     plugin_gen_inject(ptb);
 }
+
+void plugin_gen_insn_trans(CPUState *cpu, const DisasContextBase *db)
+{
+    CPUArchState *env = cpu_env(cpu);
+    uint32_t insn = cpu_ldl_code(env, db->pc_next);
+    qemu_plugin_insn_trans_cb(cpu, env, insn);
+    
+}
