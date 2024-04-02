@@ -8,28 +8,34 @@ CFLAGS += $(shell $(PKG_CONFIG) --cflags glib-2.0)
 CFLAGS += -fPIC -Wall
 CFLAGS += -I$(TOP_SRC_PATH)/include
 CFLAGS += -I$(TOP_SRC_PATH)/include/qemu
+CFLAGS += -I$(TOP_SRC_PATH)/build
 CFLAGS += -I$(TOP_SRC_PATH)/host/include/generic
 
 all: $(SONAMES)
 .SUFFIXES:
+
+test_targets := hello-syscall
+$(test_targets): %: test/%.c
+	@arm-linux-gnueabi-gcc -static -o build/$@ $<
+	@echo "${<}-->build/${@}"
+test: $(test_targets)
+
 %.o: %.c
 	@$(CC) $(CFLAGS) $(PLUGIN_CFLAGS) -c -o build/$@ $<
 	@echo "${<}-->${@}"
-
 
 %: %.o
 	@$(CC) -shared -o build/lib$@.so build/$^
 	@echo "${<}-->lib${@}.so"
 
-run:
+run: aflspy
 	cd test/ && bash start-qemu-user.sh && cd ..
 
-runsys:
-	make aflspy
+runsys: aflspy
 	cd test/ && bash start-qemu.sh && cd ..
 
 clean:
-	rm -f build/*.o build/*.so
+	rm -f build/*
 
-.PHONY: all clean
+.PHONY: all clean test $(test_targets)
 .SECONDARY:
