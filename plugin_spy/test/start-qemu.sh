@@ -1,5 +1,5 @@
 KERN=/home/czx/openbmc-workspace/openbmc/build/romulus/tmp/deploy/images/romulus
-sudo qemu-system-arm \
+sudo ../../build/qemu-system-arm \
     -m 256 -machine romulus-bmc \
     -drive file=$KERN/obmc-phosphor-image-romulus.static.mtd,if=mtd,format=raw \
     -net nic \

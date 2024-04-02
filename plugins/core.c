@@ -383,7 +383,7 @@ void qemu_plugin_tb_trans_cb(CPUState *cpu, struct qemu_plugin_tb *tb)
 }
 
 QEMU_DISABLE_CFI
-void qemu_plugin_insn_trans_cb(CPUState *cpu, CPUArchState* env, uint32_t insn)
+void qemu_plugin_insn_trans_cb(CPUState *cpu, CPUArchState *env, uint32_t insn)
 {
     struct qemu_plugin_cb *cb, *next;
     enum qemu_plugin_event ev = QEMU_PLUGIN_EV_VCPU_INSN_TRANS;
@@ -391,6 +391,18 @@ void qemu_plugin_insn_trans_cb(CPUState *cpu, CPUArchState* env, uint32_t insn)
     QLIST_FOREACH_SAFE_RCU(cb, &plugin.cb_lists[ev], entry, next) {
         qemu_plugin_vcpu_insn_trans_cb_t func = cb->f.vcpu_insn_trans;
         func(cb->ctx->id, cpu, env, insn);
+    }
+}
+
+QEMU_DISABLE_CFI
+void qemu_plugin_syscall_spy_cb(CPUState *cpu, CPUArchState *env, void *data)
+{
+    struct qemu_plugin_cb *cb, *next;
+    enum qemu_plugin_event ev = QEMU_PLUGIN_EV_VCPU_SYSCALL_SPY;
+
+    QLIST_FOREACH_SAFE_RCU(cb, &plugin.cb_lists[ev], entry, next) {
+        qemu_plugin_vcpu_syscall_spy_cb_t func = cb->f.vcpu_syscall_spy;
+        func(cb->ctx->id, cpu, env, data);
     }
 }
 

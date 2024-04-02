@@ -52,6 +52,7 @@
 #include "exec/plugin-gen.h"
 #include "exec/translator.h"
 #include "exec/helper-proto-common.h"
+#include "plugin_spy/aflspy.h"
 
 #define HELPER_H  "accel/tcg/plugin-helpers.h"
 #include "exec/helper-info.c.inc"
@@ -964,5 +965,22 @@ void plugin_gen_insn_trans(CPUState *cpu, const DisasContextBase *db)
     CPUArchState *env = cpu_env(cpu);
     uint32_t insn = cpu_ldl_code(env, db->pc_next);
     qemu_plugin_insn_trans_cb(cpu, env, insn);
-    
+    if (insn == 0xef000000) {
+        gen_helper_syscall_spy(tcg_env);
+    }
+}
+
+void HELPER(syscall_spy)(CPUArchState *env)
+{
+    CPUState *cpu = env_cpu(env);
+    g_autofree SyscallInfo *data = g_new0(SyscallInfo, 1);
+    data->num = env->regs[7];
+    data->ctx = env->cp15.ttbr0_el[3];
+    switch (env->regs[7]) {
+        case EXECVE: {
+            // data = 
+        }
+
+    }
+    qemu_plugin_syscall_spy_cb(cpu, env, data);
 }
