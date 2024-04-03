@@ -42,10 +42,34 @@ void vcpu_syscall_spy(qemu_plugin_id_t id,
             );
             qemu_plugin_outs(log);
         } break;
+        case READ: {
+            // g_autofree gchar *log = g_strdup_printf(
+            //     "ctx: %08x  read  from %d %d bytes\n"
+            //     , info->ctx
+            //     , info->params.read_params->fd
+            //     , info->params.read_params->count
+            // );
+            // qemu_plugin_outs(log);
+        } break;
+        case WRITE: {
+            if (info->params.write_params->fd == 5 &&
+                    info->params.write_params->count == 8)
+                break;
+            g_autofree gchar *log = g_strdup_printf(
+                "ctx: %08x  write  into %d %d bytes\n"
+                "\t%s\n"
+                , info->ctx
+                , info->params.write_params->fd
+                , info->params.write_params->count
+                , info->params.write_params->buf
+            );
+            qemu_plugin_outs(log);
+        } break;
         case EXECVE: {
             g_autofree gchar *log = g_strdup_printf(
-                "ctx: %08x  execve\n"
+                "ctx: %08x  execve  %s\n"
                 , info->ctx
+                , info->params.execve_params->filename
             );
             qemu_plugin_outs(log);
         } break;

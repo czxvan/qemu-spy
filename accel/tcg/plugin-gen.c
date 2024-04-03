@@ -970,6 +970,9 @@ void plugin_gen_insn_trans(CPUState *cpu, const DisasContextBase *db)
     }
 }
 
+gchar *guest_strdup(CPUState *cpu, uint32_t ptr);
+gchar *guest_strdupl(CPUState *cpu, uint32_t ptr, uint32_t len);
+
 void HELPER(syscall_spy)(CPUArchState *env)
 {
     CPUState *cpu = env_cpu(env);
@@ -977,10 +980,57 @@ void HELPER(syscall_spy)(CPUArchState *env)
     data->num = env->regs[7];
     data->ctx = env->cp15.ttbr0_el[3];
     switch (env->regs[7]) {
+        case READ: {
+            ReadParams *read_params = g_new0(ReadParams, 1);
+            read_params->fd = env->regs[0];
+            // read_params->buf = guest_strdup(cpu, env->regs[1]);
+            read_params->buf = NULL;
+            read_params->count = env->regs[1];
+            data->params.read_params = read_params;
+        } break;
+        case WRITE: {
+            WriteParams *write_params = g_new0(WriteParams, 1);
+            write_params->fd = env->regs[0];
+            write_params->buf = guest_strdupl(cpu, env->regs[1], env->regs[2]);
+            write_params->count = env->regs[2];
+            data->params.write_params = write_params;
+        } break;
         case EXECVE: {
-            // data = 
-        }
+            ExecveParams *execve_params = g_new0(ExecveParams, 1);
+            execve_params->filename = guest_strdup(cpu, env->regs[0]);
+            data->params.execve_params = execve_params;
+        } break;
 
     }
     qemu_plugin_syscall_spy_cb(cpu, env, data);
+}
+
+gchar *guest_strdup(CPUState *cpu, uint32_t ptr)
+{
+    if (!ptr) {
+        return NULL;
+    }
+    uint8_t chr;
+    target_ulong len = 0;
+    do {
+        cpu_memory_rw_debug(cpu, ptr + len, &chr, 1, 0);
+        ++len;
+    } while (chr);
+    gchar *str = g_malloc(len);
+    cpu_memory_rw_debug(cpu, ptr, (uint8_t*)str, len, 0);
+    return str;
+}
+
+gchar *guest_strdupl(CPUState *cpu, uint32_t ptr, uint32_t len)
+{
+    if (!ptr) {
+        return NULL;
+    } 
+    if (len > 256) {
+        return NULL;
+    }
+    gchar *str = g_malloc(len+1);
+    cpu_memory_rw_debug(cpu, ptr, (uint8_t*)str, len, 0);
+    str[len] = '\0';
+    return str;
 }
