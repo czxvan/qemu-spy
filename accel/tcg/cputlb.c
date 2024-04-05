@@ -43,7 +43,7 @@
 #endif
 #include "tcg/tcg-ldst.h"
 #include "tcg/oversized-guest.h"
-
+#include "exec/plugin-gen.h"
 /* DEBUG defines, enable DEBUG_TLB_LOG to log to the CPU_LOG_MMU target */
 /* #define DEBUG_TLB */
 /* #define DEBUG_TLB_LOG */
@@ -1144,6 +1144,11 @@ void tlb_set_page_full(CPUState *cpu, int mmu_idx,
     tlb_debug("vaddr=%016" VADDR_PRIx " paddr=0x" HWADDR_FMT_plx
               " prot=%x idx=%d\n",
               addr, full->phys_addr, prot, mmu_idx);
+#ifdef CONFIG_PLUGIN
+    plugin_gen_tlb_set(cpu, addr,
+                       full->phys_addr,
+                       prot, mmu_idx);
+#endif
 
     read_flags = full->tlb_fill_flags;
     if (full->lg_page_size < TARGET_PAGE_BITS) {

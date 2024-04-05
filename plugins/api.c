@@ -186,6 +186,12 @@ void qemu_plugin_register_vcpu_syscall_spy_cb(qemu_plugin_id_t id,
     plugin_register_cb(id, QEMU_PLUGIN_EV_VCPU_SYSCALL_SPY, cb);
 }
 
+void qemu_plugin_register_vcpu_tlb_set_cb(qemu_plugin_id_t id,
+                                           qemu_plugin_vcpu_tlb_set_cb_t cb)
+{
+    plugin_register_cb(id, QEMU_PLUGIN_EV_VCPU_TLB_SET, cb);
+}
+
 void qemu_plugin_register_vcpu_syscall_cb(qemu_plugin_id_t id,
                                           qemu_plugin_vcpu_syscall_cb_t cb)
 {

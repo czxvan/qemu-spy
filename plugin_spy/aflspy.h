@@ -45,5 +45,14 @@ typedef struct {
     } params;
 } SyscallInfo;
 
+typedef struct {
+    uint32_t ctx;
+    uint32_t addr;
+    uint32_t paddr;
+    uint32_t prot;
+    uint32_t mmu_idx;
+} TLBInfo;
+
+
 
 

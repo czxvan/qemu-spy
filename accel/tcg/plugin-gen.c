@@ -970,6 +970,18 @@ void plugin_gen_insn_trans(CPUState *cpu, const DisasContextBase *db)
     }
 }
 
+void plugin_gen_tlb_set(CPUState* cpu, vaddr addr, hwaddr paddr, int prot, int mmu_idx)
+{
+    CPUArchState *env = cpu_env(cpu);
+    g_autofree TLBInfo* data = g_new0(TLBInfo, 1);
+    data->ctx = env->cp15.ttbr0_el[3];
+    data->addr = addr;
+    data->paddr = paddr;
+    data->prot = prot;
+    data->mmu_idx = mmu_idx;
+    qemu_plugin_tlb_set_cb(cpu, env, data);
+}
+
 gchar *guest_strdup(CPUState *cpu, uint32_t ptr);
 gchar *guest_strdupl(CPUState *cpu, uint32_t ptr, uint32_t len);
 
@@ -1028,6 +1040,13 @@ gchar *guest_strdupl(CPUState *cpu, uint32_t ptr, uint32_t len)
     } 
     if (len > 256) {
         return NULL;
+    }
+    int i = 0;
+    char chr;
+    while( i != len) {
+        c
+        ppu_memory_rw_debug(cpu, ptr + i, &chr, 1, 0);
+        ++i;
     }
     gchar *str = g_malloc(len+1);
     cpu_memory_rw_debug(cpu, ptr, (uint8_t*)str, len, 0);

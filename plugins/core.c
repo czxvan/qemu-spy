@@ -406,6 +406,18 @@ void qemu_plugin_syscall_spy_cb(CPUState *cpu, CPUArchState *env, void *data)
     }
 }
 
+QEMU_DISABLE_CFI
+void qemu_plugin_tlb_set_cb(CPUState *cpu, CPUArchState *env, void *data)
+{
+    struct qemu_plugin_cb *cb, *next;
+    enum qemu_plugin_event ev = QEMU_PLUGIN_EV_VCPU_TLB_SET;
+
+    QLIST_FOREACH_SAFE_RCU(cb, &plugin.cb_lists[ev], entry, next) {
+        qemu_plugin_vcpu_tlb_set_cb_t func = cb->f.vcpu_tlb_set;
+        func(cb->ctx->id, cpu, env, data);
+    }
+}
+
 /*
  * Disable CFI checks.
  * The callback function has been loaded from an external library so we do not
