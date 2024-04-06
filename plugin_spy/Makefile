@@ -18,6 +18,11 @@ test_targets := hello-syscall
 $(test_targets): %: test/%.c
 	@arm-linux-gnueabi-gcc -static -o build/$@ $<
 	@echo "${<}-->build/${@}"
+
+test_targets_cpp := hello-crow
+$(test_targets_cpp): %: test/%.cpp
+	@arm-linux-gnueabi-g++ -static -o build/$@ $<
+	@echo "${<}-->build/${@}"
 test: $(test_targets)
 
 %.o: %.c

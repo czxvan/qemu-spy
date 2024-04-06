@@ -1007,12 +1007,85 @@ void HELPER(syscall_spy)(CPUArchState *env)
             write_params->count = env->regs[2];
             data->params.write_params = write_params;
         } break;
+        case OPEN: {
+            OpenParams *open_params = g_new0(OpenParams, 1);
+            open_params->filename = guest_strdup(cpu, env->regs[0]);
+            data->params.open_params = open_params;
+        } break;
+        case CLOSE: {
+            CloseParams *close_params = g_new0(CloseParams, 1);
+            close_params->fd =env->regs[0];
+            data->params.close_params = close_params;
+        } break;
         case EXECVE: {
             ExecveParams *execve_params = g_new0(ExecveParams, 1);
             execve_params->filename = guest_strdup(cpu, env->regs[0]);
             data->params.execve_params = execve_params;
         } break;
-
+        case SEND: {
+            SendParams *send_params = g_new0(SendParams, 1);
+            send_params->sockfd = env->regs[0];
+            send_params->buf = guest_strdupl(cpu, env->regs[1], env->regs[2]);
+            send_params->len = env->regs[2];
+            send_params->flags = env->regs[3];
+            data->params.send_params = send_params;
+        } break;
+        case SENDTO: {
+            SendtoParams *sendto_params = g_new0(SendtoParams, 1);
+            sendto_params->sockfd = env->regs[0];
+            sendto_params->buf = guest_strdupl(cpu, env->regs[1], env->regs[2]);
+            sendto_params->len = env->regs[2];
+            sendto_params->flags = env->regs[3];
+            sendto_params->dest_addr = env->regs[4];
+            sendto_params->dest_len = env->regs[5];
+            data->params.sendto_params = sendto_params;
+        } break;
+        case RECV: {
+            RecvParams *recv_params = g_new0(RecvParams, 1);
+            recv_params->sockfd = env->regs[0];
+            recv_params->buf = NULL;
+            recv_params->len = env->regs[2];
+            recv_params->flags = env->regs[3];
+            data->params.recv_params = recv_params;
+        } break;
+        case RECVFROM: {
+            RecvfromParams *recvfrom_params = g_new0(RecvfromParams, 1);
+            recvfrom_params->sockfd = env->regs[0];
+            recvfrom_params->buf = NULL;
+            recvfrom_params->len = env->regs[2];
+            recvfrom_params->flags = env->regs[3];
+            recvfrom_params->src_addr = env->regs[4];
+            recvfrom_params->src_len = env->regs[5];
+            data->params.recvfrom_params = recvfrom_params;
+        } break;
+        case SOCKET: {
+            SocketParams *socket_params = g_new0(SocketParams, 1);
+            socket_params->domain = env->regs[0];
+            socket_params->type = env->regs[1];
+            socket_params->protocol = env->regs[2];
+            data->params.socket_params = socket_params;
+        } break;
+        case BIND: {
+            BindParams *bind_params = g_new0(BindParams, 1);
+            bind_params->sockfd = env->regs[0];
+            bind_params->sock_addr = env->regs[1];
+            bind_params->addr_len = env->regs[2];
+            data->params.bind_params = bind_params;
+        } break;
+        case LISTEN: {
+            ListenParams *listen_params = g_new0(ListenParams, 1);
+            listen_params->sockfd = env->regs[0];
+            listen_params->backlog = env->regs[1];
+            data->params.listen_params = listen_params;
+        } break;
+        case ACCEPT: {
+            AcceptParams *accept_params = g_new0(AcceptParams, 1);
+            accept_params->sockfd = env->regs[0];
+            accept_params->sock_addr = env->regs[1];
+            accept_params->addr_len = env->regs[2];
+            data->params.accept_params = accept_params;
+        } break;
+        
     }
     qemu_plugin_syscall_spy_cb(cpu, env, data);
 }
@@ -1038,16 +1111,6 @@ gchar *guest_strdupl(CPUState *cpu, uint32_t ptr, uint32_t len)
     if (!ptr) {
         return NULL;
     } 
-    if (len > 256) {
-        return NULL;
-    }
-    int i = 0;
-    char chr;
-    while( i != len) {
-        c
-        ppu_memory_rw_debug(cpu, ptr + i, &chr, 1, 0);
-        ++i;
-    }
     gchar *str = g_malloc(len+1);
     cpu_memory_rw_debug(cpu, ptr, (uint8_t*)str, len, 0);
     str[len] = '\0';
