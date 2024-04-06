@@ -407,6 +407,18 @@ void qemu_plugin_syscall_spy_cb(CPUState *cpu, CPUArchState *env, void *data)
 }
 
 QEMU_DISABLE_CFI
+void qemu_plugin_tb_exec_spy_cb(CPUState *cpu, CPUArchState *env, void *data)
+{
+    struct qemu_plugin_cb *cb, *next;
+    enum qemu_plugin_event ev = QEMU_PLUGIN_EV_VCPU_TB_EXEC_SPY;
+
+    QLIST_FOREACH_SAFE_RCU(cb, &plugin.cb_lists[ev], entry, next) {
+        qemu_plugin_vcpu_tb_exec_spy_cb_t func = cb->f.vcpu_tb_exec_spy;
+        func(cb->ctx->id, cpu, env, data);
+    }
+}
+
+QEMU_DISABLE_CFI
 void qemu_plugin_tlb_set_cb(CPUState *cpu, CPUArchState *env, void *data)
 {
     struct qemu_plugin_cb *cb, *next;

@@ -4,10 +4,13 @@
 #include <unistd.h>
 #include <qemu-plugin-spy.h>
 #include "aflspy.h"
+
 QEMU_PLUGIN_EXPORT int qemu_plugin_version = QEMU_PLUGIN_VERSION;
 
+static const char *QEMU_MODE = NULL;
 static uint32_t target_ctx = 0;
 static gboolean system_started = false;
+
 static const char *system_started_indicator_process = "/usr/bin/phosphor-host-state-manager";
 
 void vcpu_insn_trans(qemu_plugin_id_t id,
@@ -20,18 +23,20 @@ void vcpu_insn_trans(qemu_plugin_id_t id,
         g_autofree gchar *log = g_strdup_printf("count: %ld, insn: %08x\n", count, insn);
         qemu_plugin_outs(log);
     }
-   
 }
 
-#define LOG_STATEMENT(log, ...) \
-    g_autofree gchar *log = g_strdup_printf(__VA_ARGS__); \
-    qemu_plugin_outs(log);
-
-#define LOG_STATEMENT_WITH_CTX(log, ...) \
-    g_autofree gchar *log = g_strdup_printf("ctx: %08x  " __VA_ARGS__, target_ctx); \
-    qemu_plugin_outs(log);
-
-#define LOG_MASK(cond) (cond) && system_started && target_ctx != 0 && info->ctx == target_ctx
+void vcpu_tb_exec_spy(qemu_plugin_id_t id,
+                        CPUState *cpu, CPUArchState *env,
+                        void *data)
+{
+    TBInfo *info = (TBInfo *)data;
+    gboolean log_tb_exec_spy = LOG_MASK(true);
+    
+    if (log_tb_exec_spy)
+        LOG_STATEMENT("ctx: %08x  tb_exec pc: %08x\n"
+                        , info->ctx
+                        , info->pc);
+}
 
 void vcpu_syscall_spy(qemu_plugin_id_t id,
                             CPUState *cpu, CPUArchState *env,
@@ -41,21 +46,21 @@ void vcpu_syscall_spy(qemu_plugin_id_t id,
 
     gboolean log_exit = LOG_MASK(true);
     gboolean log_fork = LOG_MASK(true);
-    gboolean log_read = LOG_MASK(true);
-    gboolean log_write = LOG_MASK(true);
-    gboolean log_open = LOG_MASK(true);
-    gboolean log_close = LOG_MASK(true);
+    gboolean log_read = LOG_MASK(true) || QEMU_USER_MODE;
+    gboolean log_write = LOG_MASK(true) || QEMU_USER_MODE;
+    gboolean log_open = LOG_MASK(true) || QEMU_USER_MODE;
+    gboolean log_close = LOG_MASK(true) || !QEMU_USER_MODE;
     gboolean log_execve = LOG_MASK(true);
     gboolean log_clone = LOG_MASK(true);
-    gboolean log_send = LOG_MASK(true);
-    gboolean log_sendto = LOG_MASK(true);
-    gboolean log_recv = LOG_MASK(true);
-    gboolean log_recvfrom = LOG_MASK(true);
+    gboolean log_send = LOG_MASK(true) || QEMU_USER_MODE;
+    gboolean log_sendto = LOG_MASK(true) || QEMU_USER_MODE;
+    gboolean log_recv = LOG_MASK(true) || QEMU_USER_MODE;
+    gboolean log_recvfrom = LOG_MASK(true) || QEMU_USER_MODE;
 
-    gboolean log_socket = LOG_MASK(true);
-    gboolean log_bind = LOG_MASK(true);
-    gboolean log_listen = LOG_MASK(true);
-    gboolean log_accept = LOG_MASK(true);
+    gboolean log_socket = LOG_MASK(true) || QEMU_USER_MODE;
+    gboolean log_bind = LOG_MASK(true) || QEMU_USER_MODE;
+    gboolean log_listen = LOG_MASK(true) || QEMU_USER_MODE;
+    gboolean log_accept = LOG_MASK(true) || QEMU_USER_MODE;
     gboolean log_default = LOG_MASK(false);
 
     switch (info->num) {
@@ -293,11 +298,12 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
                                            const qemu_info_t *info, int argc,
                                            char **argv)
 {
-
+    QEMU_MODE = getenv("QEMU_MODE");
     /* Register init, translation block and exit callbacks */
     // qemu_plugin_register_vcpu_init_cb(id, vcpu_init);
     // qemu_plugin_register_vcpu_tb_trans_cb(id, vcpu_tb_trans);
     qemu_plugin_register_vcpu_insn_trans_cb(id, vcpu_insn_trans);
     qemu_plugin_register_vcpu_syscall_spy_cb(id, vcpu_syscall_spy);
+    qemu_plugin_register_vcpu_tb_exec_spy_cb(id, vcpu_tb_exec_spy);
     return 0;
 }

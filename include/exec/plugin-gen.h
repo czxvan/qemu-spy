@@ -23,8 +23,10 @@ bool plugin_gen_tb_start(CPUState *cpu, const struct DisasContextBase *db,
 void plugin_gen_tb_end(CPUState *cpu, size_t num_insns);
 void plugin_gen_insn_start(CPUState *cpu, const struct DisasContextBase *db);
 void plugin_gen_insn_end(void);
-void plugin_gen_insn_trans(CPUState *cpu, const struct DisasContextBase *db);
-void plugin_gen_tlb_set(CPUState* cpu, vaddr addr, hwaddr paddr, int prot, int mmu_idx);
+
+void plugin_gen_tb_trans_spy(CPUState *cpu, const struct DisasContextBase *db);
+void plugin_gen_insn_trans_spy(CPUState *cpu, const struct DisasContextBase *db);
+void plugin_gen_tlb_set_spy(CPUState* cpu, vaddr addr, hwaddr paddr, int prot, int mmu_idx);
 
 void plugin_gen_disable_mem_helpers(void);
 void plugin_gen_empty_mem_callback(TCGv_i64 addr, uint32_t info);
@@ -45,11 +47,15 @@ static inline void plugin_gen_insn_end(void)
 { }
 
 static inline
-void plugin_gen_insn_trans(CPUState *cpu, const struct DisasContextBase *db)
+void plugin_gen_tb_trans_spy(CPUState *cpu, const struct DisasContextBase *db)
 { }
 
 static inline
-void plugin_gen_tlb_set(CPUState* cpu, vaddr addr, hwaddr paddr, int prot, int mmu_idx)
+void plugin_gen_insn_trans_spy(CPUState *cpu, const struct DisasContextBase *db)
+{ }
+
+static inline
+void plugin_gen_tlb_set_spy(CPUState* cpu, vaddr addr, hwaddr paddr, int prot, int mmu_idx)
 { }
 
 static inline void plugin_gen_tb_end(CPUState *cpu, size_t num_insns)

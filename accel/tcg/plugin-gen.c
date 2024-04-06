@@ -960,7 +960,25 @@ void plugin_gen_tb_end(CPUState *cpu, size_t num_insns)
     plugin_gen_inject(ptb);
 }
 
-void plugin_gen_insn_trans(CPUState *cpu, const DisasContextBase *db)
+gchar *guest_strdup(CPUState *cpu, uint32_t ptr);
+gchar *guest_strdupl(CPUState *cpu, uint32_t ptr, uint32_t len);
+
+void plugin_gen_tb_trans_spy(CPUState *cpu, const DisasContextBase *db)
+{
+    gen_helper_tb_exec_spy(tcg_env);
+}
+
+void HELPER(tb_exec_spy)(CPUArchState *env)
+{
+    CPUState *cpu = env_cpu(env);
+    g_autofree TBInfo *data = g_new0(TBInfo, 1);
+    data->ctx = env->cp15.ttbr0_el[3];
+    data->pc = env->regs[15];
+    
+    qemu_plugin_tb_exec_spy_cb(cpu, env, data);
+}
+
+void plugin_gen_insn_trans_spy(CPUState *cpu, const DisasContextBase *db)
 {
     CPUArchState *env = cpu_env(cpu);
     uint32_t insn = cpu_ldl_code(env, db->pc_next);
@@ -969,21 +987,6 @@ void plugin_gen_insn_trans(CPUState *cpu, const DisasContextBase *db)
         gen_helper_syscall_spy(tcg_env);
     }
 }
-
-void plugin_gen_tlb_set(CPUState* cpu, vaddr addr, hwaddr paddr, int prot, int mmu_idx)
-{
-    CPUArchState *env = cpu_env(cpu);
-    g_autofree TLBInfo* data = g_new0(TLBInfo, 1);
-    data->ctx = env->cp15.ttbr0_el[3];
-    data->addr = addr;
-    data->paddr = paddr;
-    data->prot = prot;
-    data->mmu_idx = mmu_idx;
-    qemu_plugin_tlb_set_cb(cpu, env, data);
-}
-
-gchar *guest_strdup(CPUState *cpu, uint32_t ptr);
-gchar *guest_strdupl(CPUState *cpu, uint32_t ptr, uint32_t len);
 
 void HELPER(syscall_spy)(CPUArchState *env)
 {
@@ -1088,6 +1091,18 @@ void HELPER(syscall_spy)(CPUArchState *env)
         
     }
     qemu_plugin_syscall_spy_cb(cpu, env, data);
+}
+
+void plugin_gen_tlb_set_spy(CPUState* cpu, vaddr addr, hwaddr paddr, int prot, int mmu_idx)
+{
+    CPUArchState *env = cpu_env(cpu);
+    g_autofree TLBInfo* data = g_new0(TLBInfo, 1);
+    data->ctx = env->cp15.ttbr0_el[3];
+    data->addr = addr;
+    data->paddr = paddr;
+    data->prot = prot;
+    data->mmu_idx = mmu_idx;
+    qemu_plugin_tlb_set_cb(cpu, env, data);
 }
 
 gchar *guest_strdup(CPUState *cpu, uint32_t ptr)

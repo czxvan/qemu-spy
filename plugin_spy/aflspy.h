@@ -15,6 +15,20 @@
 #define LISTEN  284
 #define ACCEPT  285
 
+#define LOG_STATEMENT(...) \
+    { \
+        g_autofree gchar *log = g_strdup_printf(__VA_ARGS__); \
+        qemu_plugin_outs(log); \
+    }
+    
+
+#define LOG_STATEMENT_WITH_CTX(...) \
+    g_autofree gchar *log = g_strdup_printf("ctx: %08x  " __VA_ARGS__, target_ctx); \
+    qemu_plugin_outs(log);
+
+#define LOG_MASK(cond) ((cond) && system_started && info->ctx == target_ctx)
+#define QEMU_USER_MODE (g_strcmp0(QEMU_MODE, "USER") == 0)
+#define QEMU_SYSTEM_MODE (g_strcmp0(QEMU_MODE, "USER") != 0)
 
 typedef struct {
     uint32_t fd;
@@ -125,12 +139,13 @@ typedef struct {
 
 typedef struct {
     uint32_t ctx;
+    uint32_t pc;
+} TBInfo;
+
+typedef struct {
+    uint32_t ctx;
     uint32_t addr;
     uint32_t paddr;
     uint32_t prot;
     uint32_t mmu_idx;
 } TLBInfo;
-
-
-
-

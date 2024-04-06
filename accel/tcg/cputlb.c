@@ -1145,7 +1145,7 @@ void tlb_set_page_full(CPUState *cpu, int mmu_idx,
               " prot=%x idx=%d\n",
               addr, full->phys_addr, prot, mmu_idx);
 #ifdef CONFIG_PLUGIN
-    plugin_gen_tlb_set(cpu, addr,
+    plugin_gen_tlb_set_spy(cpu, addr,
                        full->phys_addr,
                        prot, mmu_idx);
 #endif

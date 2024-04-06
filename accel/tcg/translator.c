@@ -153,6 +153,9 @@ void translator_loop(CPUState *cpu, TranslationBlock *tb, int *max_insns,
 
     plugin_enabled = plugin_gen_tb_start(cpu, db, cflags & CF_MEMI_ONLY);
     db->plugin_enabled = plugin_enabled;
+#ifdef CONFIG_PLUGIN
+    plugin_gen_tb_trans_spy(cpu, db);
+#endif
 
     while (true) {
         *max_insns = ++db->num_insns;
@@ -164,7 +167,7 @@ void translator_loop(CPUState *cpu, TranslationBlock *tb, int *max_insns,
         }
 
 #ifdef CONFIG_PLUGIN
-        plugin_gen_insn_trans(cpu, db);
+        plugin_gen_insn_trans_spy(cpu, db);
 #endif
 
         /*
