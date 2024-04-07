@@ -15,12 +15,14 @@
 #define LISTEN  284
 #define ACCEPT  285
 
+#define CTL_READ_FD 198
+#define STATE_WRITE_FD 199
+
 #define LOG_STATEMENT(...) \
     { \
         g_autofree gchar *log = g_strdup_printf(__VA_ARGS__); \
         qemu_plugin_outs(log); \
     }
-    
 
 #define LOG_STATEMENT_WITH_CTX(...) \
     g_autofree gchar *log = g_strdup_printf("ctx: %08x  " __VA_ARGS__, target_ctx); \
@@ -149,3 +151,8 @@ typedef struct {
     uint32_t prot;
     uint32_t mmu_idx;
 } TLBInfo;
+
+#define SYSTEM_STARTED_INDICATOR_PROCESS "/usr/bin/phosphor-host-state-manager"
+
+void afl_forkserver(void);
+

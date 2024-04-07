@@ -2,7 +2,7 @@ SRC_PATH=/home/czx/qemu-workspace/qemu-spy/plugin_spy
 TOP_SRC_PATH = $(SRC_PATH)/..
 PKG_CONFIG=pkg-config
 CC=cc -m64 -mcx16
-CFLAGS=-O2 -g
+CFLAGS=-O0 -g
 
 CFLAGS += $(shell $(PKG_CONFIG) --cflags glib-2.0)
 CFLAGS += -fPIC -Wall
@@ -14,7 +14,7 @@ CFLAGS += -I$(TOP_SRC_PATH)/host/include/generic
 all: $(SONAMES)
 .SUFFIXES:
 
-test_targets := hello-syscall
+test_targets := hello-syscall hello-pipe
 $(test_targets): %: test/%.c
 	@arm-linux-gnueabi-gcc -static -o build/$@ $<
 	@echo "${<}-->build/${@}"
@@ -30,7 +30,7 @@ test: $(test_targets)
 	@echo "${<}-->${@}"
 
 %: %.o
-	@$(CC) -shared -o build/lib$@.so build/$^
+	@$(CC) $(CFLAGS) -shared -o build/lib$@.so build/$^
 	@echo "${<}-->lib${@}.so"
 
 run: aflspy

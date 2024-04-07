@@ -11,7 +11,6 @@ static const char *QEMU_MODE = NULL;
 static uint32_t target_ctx = 0;
 static gboolean system_started = false;
 
-static const char *system_started_indicator_process = "/usr/bin/phosphor-host-state-manager";
 
 void vcpu_insn_trans(qemu_plugin_id_t id,
                             CPUState *cpu, CPUArchState *env,
@@ -49,7 +48,7 @@ void vcpu_syscall_spy(qemu_plugin_id_t id,
     gboolean log_read = LOG_MASK(true) || QEMU_USER_MODE;
     gboolean log_write = LOG_MASK(true) || QEMU_USER_MODE;
     gboolean log_open = LOG_MASK(true) || QEMU_USER_MODE;
-    gboolean log_close = LOG_MASK(true) || !QEMU_USER_MODE;
+    gboolean log_close = LOG_MASK(false) || QEMU_USER_MODE;
     gboolean log_execve = LOG_MASK(true);
     gboolean log_clone = LOG_MASK(true);
     gboolean log_send = LOG_MASK(true) || QEMU_USER_MODE;
@@ -132,7 +131,7 @@ void vcpu_syscall_spy(qemu_plugin_id_t id,
             }
         } break;
         case EXECVE: {
-            if (strstr(info->params.execve_params->filename, system_started_indicator_process) != NULL) {
+            if (strstr(info->params.execve_params->filename, SYSTEM_STARTED_INDICATOR_PROCESS) != NULL) {
                 system_started = true;
             }
             if (log_execve) {
@@ -267,7 +266,7 @@ void vcpu_syscall_spy(qemu_plugin_id_t id,
             }
         } break;
         case ACCEPT: {
-            if (system_started) {
+            if (system_started && !target_ctx) {
                 target_ctx = info->ctx;
             }
             if (log_accept) {

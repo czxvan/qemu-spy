@@ -988,6 +988,7 @@ void plugin_gen_insn_trans_spy(CPUState *cpu, const DisasContextBase *db)
     }
 }
 
+QEMU_DISABLE_CFI
 void HELPER(syscall_spy)(CPUArchState *env)
 {
     CPUState *cpu = env_cpu(env);
@@ -1091,6 +1092,81 @@ void HELPER(syscall_spy)(CPUArchState *env)
         
     }
     qemu_plugin_syscall_spy_cb(cpu, env, data);
+
+    static gboolean system_ready = 0;
+    static gboolean forkserver_ready = 0;
+    if (env->regs[7] == EXECVE && !system_ready) {
+        if (g_strcmp0(data->params.execve_params->filename, 
+                    SYSTEM_STARTED_INDICATOR_PROCESS) == 0) {
+            system_ready = 1;
+        }
+    }
+    if (env->regs[7] == ACCEPT) {
+        if (system_ready && !forkserver_ready) {
+            forkserver_ready = 1;
+            afl_forkserver();
+        }
+    }
+}
+
+void afl_forkserver(void)
+{
+    // pid_t afl_forksrv_pid = getpid();
+    static char received_buf[5];
+
+    if(write(STATE_WRITE_FD, "RDY!", 4) == 4) {
+        LOG_STATEMENT("Sent to state pipe: RDY!\n");
+    } else {
+        LOG_STATEMENT("Error writing to state pipe\n");
+        exit(2);
+    }
+
+    if(read(CTL_READ_FD, received_buf, 4) == 4
+        && strncmp(received_buf, "FORK", 4) == 0) {
+        LOG_STATEMENT("Received from ctl pipe: %s\n", received_buf);
+    } else {
+        LOG_STATEMENT("Error reading from ctl pipe\n");
+        exit(2);
+    }
+
+    while(1) {
+        pid_t child_pid = 0;
+        // uint32_t status;
+        // uint32_t t_fd[2];
+
+
+        if(read(CTL_READ_FD, received_buf, 4) == 4) {
+            LOG_STATEMENT("Received from ctl pipe: %s\n", received_buf);
+
+            if(strncmp(received_buf, "STRT", 4) == 0) {
+                child_pid = fork();
+                if (child_pid == 0) {
+                    // dispatch child process to deal with the next text
+                    LOG_STATEMENT("fork and return child process: %d\n", getpid());
+                    return;
+                }
+            } else if (strncmp(received_buf, "DONE", 4) == 0) {
+                // kill the last child pid
+                if (kill(child_pid, SIGTERM) == 0) {
+                    LOG_STATEMENT("Process with PID %d has been killed.\n", child_pid);
+                } else {
+                    LOG_STATEMENT("Failed to kill process with PID %d.\n", child_pid);
+                }
+                // return the last test case result state
+                if(write(STATE_WRITE_FD, "GOOD", 4) == 4) {
+                    LOG_STATEMENT("Sent to state pipe: GOOD\n");
+                } else {
+                    LOG_STATEMENT("Error writing to state pipe\n");
+                    exit(2);
+                }
+            }
+        }
+        else {
+            LOG_STATEMENT("Error reading from ctl pipe\n");
+            exit(2);
+        }
+            
+    }
 }
 
 void plugin_gen_tlb_set_spy(CPUState* cpu, vaddr addr, hwaddr paddr, int prot, int mmu_idx)
