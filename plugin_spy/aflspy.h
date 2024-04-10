@@ -154,5 +154,10 @@ typedef struct {
 
 #define SYSTEM_STARTED_INDICATOR_PROCESS "/usr/bin/phosphor-host-state-manager"
 
+extern gboolean system_started;
+extern gboolean forkserver_started;
+extern gboolean afl_wants_cpu_to_stop;
+extern int afl_qemuloop_pipe[2];
+extern CPUState *snapshot_cpu;
 void afl_forkserver(void);
 

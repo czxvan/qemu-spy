@@ -988,6 +988,9 @@ void plugin_gen_insn_trans_spy(CPUState *cpu, const DisasContextBase *db)
     }
 }
 
+gboolean system_started = 0;
+gboolean forkserver_started = 0;
+gboolean afl_wants_cpu_to_stop = 0;
 QEMU_DISABLE_CFI
 void HELPER(syscall_spy)(CPUArchState *env)
 {
@@ -1093,17 +1096,15 @@ void HELPER(syscall_spy)(CPUArchState *env)
     }
     qemu_plugin_syscall_spy_cb(cpu, env, data);
 
-    static gboolean system_ready = 0;
-    static gboolean forkserver_ready = 0;
-    if (env->regs[7] == EXECVE && !system_ready) {
+    if (env->regs[7] == EXECVE && !system_started) {
         if (g_strcmp0(data->params.execve_params->filename, 
                     SYSTEM_STARTED_INDICATOR_PROCESS) == 0) {
-            system_ready = 1;
+            system_started = 1;
         }
     }
     if (env->regs[7] == ACCEPT) {
-        if (system_ready && !forkserver_ready) {
-            forkserver_ready = 1;
+        if (system_started && !forkserver_started && !afl_wants_cpu_to_stop) {
+            afl_wants_cpu_to_stop = 1;
             afl_forkserver();
         }
     }
