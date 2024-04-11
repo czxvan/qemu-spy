@@ -46,9 +46,13 @@ void tcg_init(size_t tb_size, int splitwx, unsigned max_cpus);
 void tcg_register_thread(void);
 
 /**
- * tcg_unregister_thread: Unregister this thread with the TCG runtime
- */
-void tcg_unregister_thread(void);
+ * tcg_reuse_thread: Reuse the current thread and tcg_ctx for TCG
+ *
+ * This function is called by the afterward threads to reuse the current
+ * thread and for tcg_ctx TCG translation. It is called after the first one
+ * has called tcg_register_thread() and then exit.
+*/
+void tcg_reuse_thread(void);
 
 /**
  * tcg_prologue_init(): Generate the code for the TCG prologue

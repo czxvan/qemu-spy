@@ -35,6 +35,7 @@
 #include "tcg/startup.h"
 #include "tcg-accel-ops.h"
 #include "tcg-accel-ops-mttcg.h"
+#include "plugin_spy/aflspy.h"
 
 typedef struct MttcgForceRcuNotifier {
     Notifier notifier;
@@ -64,6 +65,7 @@ static void mttcg_force_rcu(Notifier *notify, void *data)
 
 static void *mttcg_cpu_thread_fn(void *arg)
 {
+again:
     MttcgForceRcuNotifier force_rcu;
     CPUState *cpu = arg;
 
@@ -74,8 +76,15 @@ static void *mttcg_cpu_thread_fn(void *arg)
     force_rcu.notifier.notify = mttcg_force_rcu;
     force_rcu.cpu = cpu;
     rcu_add_force_rcu_notifier(&force_rcu.notifier);
-    tcg_register_thread();
-
+    static gboolean first = 1;
+    if (first) {
+        first = 0;
+        tcg_register_thread();
+    } else {
+        // Assume that there is always one thread and reuse the tcg_ctx
+        tcg_reuse_thread();
+    }
+    
     bql_lock();
     qemu_thread_get_self(cpu->thread);
 
@@ -116,12 +125,25 @@ static void *mttcg_cpu_thread_fn(void *arg)
 
         qatomic_set_mb(&cpu->exit_request, 0);
         qemu_wait_io_event(cpu);
-    } while (!cpu->unplug || cpu_can_run(cpu));
+    } while (!afl_wants_cpu_to_stop && (!cpu->unplug || cpu_can_run(cpu)));
 
+    if(afl_wants_cpu_to_stop) {
+        afl_wants_cpu_to_stop = 0;
+        snapshot_cpu = first_cpu;
+        forkserver_started = 1;
+        // if (write(afl_qemuloop_pipe[1], "FORK", 4) != 4) {
+        //     perror("write");
+        //     exit(2);
+        // }
+        // QTAILQ_FIRST(&cpus_queue) = NULL;
+        // cpu_disable_ticks();
+        // qemu_wait_io_event(cpu);
+    }
     tcg_cpu_destroy(cpu);
     bql_unlock();
     rcu_remove_force_rcu_notifier(&force_rcu.notifier);
     rcu_unregister_thread();
+    goto again;
     return NULL;
 }
 
