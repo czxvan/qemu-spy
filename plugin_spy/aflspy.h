@@ -159,5 +159,12 @@ extern gboolean forkserver_started;
 extern gboolean afl_wants_cpu_to_stop;
 extern int afl_qemuloop_pipe[2];
 extern CPUState *snapshot_cpu;
-void afl_forkserver(void);
+extern CPUState *backup_cpu;
+extern CPUArchState *backup_env;
+
+void qemuloopPipeHandler(void *data);
+void afl_setup(void);
+void afl_forkserver(CPUArchState *env);
+
+void dump_CPUState(CPUState *cpu);
 

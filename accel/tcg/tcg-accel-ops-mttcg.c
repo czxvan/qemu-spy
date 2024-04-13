@@ -30,6 +30,7 @@
 #include "qemu/main-loop.h"
 #include "qemu/notify.h"
 #include "qemu/guest-random.h"
+#include "qemu/log.h"
 #include "exec/exec-all.h"
 #include "hw/boards.h"
 #include "tcg/startup.h"
@@ -76,9 +77,9 @@ again:
     force_rcu.notifier.notify = mttcg_force_rcu;
     force_rcu.cpu = cpu;
     rcu_add_force_rcu_notifier(&force_rcu.notifier);
-    static gboolean first = 1;
-    if (first) {
-        first = 0;
+    static gboolean count = 0;
+    count ++;
+    if (count == 1) {
         tcg_register_thread();
     } else {
         // Assume that there is always one thread and reuse the tcg_ctx
@@ -96,6 +97,15 @@ again:
 
     /* process any pending work */
     cpu->exit_request = 1;
+
+    if (count == 2) {
+        dump_CPUState(cpu);
+        FILE *logfile = qemu_log_trylock();
+        if(logfile) {
+            cpu_dump_state(cpu, logfile, CPU_DUMP_CODE | CPU_DUMP_VPU);
+            qemu_log_unlock(logfile);
+        }
+    }
 
     do {
         if (cpu_can_run(cpu)) {
@@ -130,20 +140,40 @@ again:
     if(afl_wants_cpu_to_stop) {
         afl_wants_cpu_to_stop = 0;
         snapshot_cpu = first_cpu;
+
+        tcg_cpu_destroy(cpu);
+        bql_unlock();
+        rcu_remove_force_rcu_notifier(&force_rcu.notifier);
+        rcu_unregister_thread();
+
+        // Maybe we should reccord the cpu's pc and other registers here
+        // But how about the stack and other memory?
         forkserver_started = 1;
+        cpu_disable_ticks();
+        qemu_wait_io_event(cpu);
+
+        // QTAILQ_FIRST(&cpus_queue) = NULL; // for what?
         // if (write(afl_qemuloop_pipe[1], "FORK", 4) != 4) {
         //     perror("write");
         //     exit(2);
         // }
-        // QTAILQ_FIRST(&cpus_queue) = NULL;
-        // cpu_disable_ticks();
-        // qemu_wait_io_event(cpu);
+        dump_CPUState(cpu);
+        FILE *logfile = qemu_log_trylock();
+        if(logfile) {
+            cpu_dump_state(cpu, logfile, CPU_DUMP_CODE | CPU_DUMP_VPU);
+            qemu_log_unlock(logfile);
+        }
+        backup_cpu = g_new0(CPUState, 1);
+        backup_env = g_new0(CPUArchState, 1);
+        memcpy(backup_cpu, cpu, sizeof(CPUState));
+        memcpy(backup_env, cpu_env(cpu), sizeof(CPUArchState));
+        goto again;
+        return NULL;
     }
     tcg_cpu_destroy(cpu);
     bql_unlock();
     rcu_remove_force_rcu_notifier(&force_rcu.notifier);
     rcu_unregister_thread();
-    goto again;
     return NULL;
 }
 
@@ -169,4 +199,44 @@ void mttcg_start_vcpu_thread(CPUState *cpu)
 
     qemu_thread_create(cpu->thread, thread_name, mttcg_cpu_thread_fn,
                        cpu, QEMU_THREAD_JOINABLE);
+}
+
+void dump_CPUState(CPUState *cpu) {
+    FILE *log = qemu_log_trylock();
+    if (log == NULL) {
+        return;
+    }
+
+    fprintf(log, "nr_cores = %d\n", cpu->nr_cores);
+    fprintf(log, "nr_threads = %d\n", cpu->nr_threads);
+    fprintf(log, "thread_id = %d\n", cpu->thread_id);
+    fprintf(log, "running = %d\n", cpu->running);
+    fprintf(log, "has_waiter = %d\n", cpu->has_waiter);
+    fprintf(log, "thread_kicked = %d\n", cpu->thread_kicked);
+    fprintf(log, "created = %d\n", cpu->created);
+    fprintf(log, "stop = %d\n", cpu->stop);
+    fprintf(log, "stopped = %d\n", cpu->stopped);
+    fprintf(log, "start_powered_off = %d\n", cpu->start_powered_off);
+    fprintf(log, "unplug = %d\n", cpu->unplug);
+    fprintf(log, "crash_occurred = %d\n", cpu->crash_occurred);
+    fprintf(log, "exit_request = %d\n", cpu->exit_request);
+    fprintf(log, "exclusive_context_count = %d\n", cpu->exclusive_context_count);
+    fprintf(log, "cflags_next_tb = %u\n", cpu->cflags_next_tb);
+    fprintf(log, "interrupt_request = %u\n", cpu->interrupt_request);
+    fprintf(log, "singlestep_enabled = %d\n", cpu->singlestep_enabled);
+    fprintf(log, "icount_budget = %ld\n", cpu->icount_budget);
+    fprintf(log, "icount_extra = %ld\n", cpu->icount_extra);
+    fprintf(log, "random_seed = %lu\n", cpu->random_seed);
+    fprintf(log, "cpu_index = %d\n", cpu->cpu_index);
+    fprintf(log, "cluster_index = %d\n", cpu->cluster_index);
+    fprintf(log, "tcg_cflags = %u\n", cpu->tcg_cflags);
+    fprintf(log, "halted = %u\n", cpu->halted);
+    fprintf(log, "exception_index = %d\n", cpu->exception_index);
+    fprintf(log, "vcpu_dirty = %d\n", cpu->vcpu_dirty);
+    fprintf(log, "throttle_thread_scheduled = %d\n", cpu->throttle_thread_scheduled);
+    fprintf(log, "throttle_us_per_full = %ld\n", cpu->throttle_us_per_full);
+    fprintf(log, "ignore_memory_transaction_failures = %d\n", cpu->ignore_memory_transaction_failures);
+    fprintf(log, "prctl_unalign_sigbus = %d\n", cpu->prctl_unalign_sigbus);
+
+    qemu_log_unlock(log);
 }
