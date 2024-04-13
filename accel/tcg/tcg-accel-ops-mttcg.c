@@ -66,7 +66,7 @@ static void mttcg_force_rcu(Notifier *notify, void *data)
 
 static void *mttcg_cpu_thread_fn(void *arg)
 {
-again:
+// again:
     MttcgForceRcuNotifier force_rcu;
     CPUState *cpu = arg;
 
@@ -83,6 +83,7 @@ again:
         tcg_register_thread();
     } else {
         // Assume that there is always one thread and reuse the tcg_ctx
+        cpu->stopped = 0;
         tcg_reuse_thread();
     }
     
@@ -152,11 +153,11 @@ again:
         cpu_disable_ticks();
         qemu_wait_io_event(cpu);
 
-        // QTAILQ_FIRST(&cpus_queue) = NULL; // for what?
-        // if (write(afl_qemuloop_pipe[1], "FORK", 4) != 4) {
-        //     perror("write");
-        //     exit(2);
-        // }
+        QTAILQ_FIRST(&cpus_queue) = NULL; // for what?
+        if (write(afl_qemuloop_pipe[1], "FORK", 4) != 4) {
+            perror("write");
+            exit(2);
+        }
         dump_CPUState(cpu);
         FILE *logfile = qemu_log_trylock();
         if(logfile) {
@@ -167,7 +168,7 @@ again:
         backup_env = g_new0(CPUArchState, 1);
         memcpy(backup_cpu, cpu, sizeof(CPUState));
         memcpy(backup_env, cpu_env(cpu), sizeof(CPUArchState));
-        goto again;
+        // goto again;
         return NULL;
     }
     tcg_cpu_destroy(cpu);
@@ -206,37 +207,37 @@ void dump_CPUState(CPUState *cpu) {
     if (log == NULL) {
         return;
     }
-
-    fprintf(log, "nr_cores = %d\n", cpu->nr_cores);
-    fprintf(log, "nr_threads = %d\n", cpu->nr_threads);
-    fprintf(log, "thread_id = %d\n", cpu->thread_id);
-    fprintf(log, "running = %d\n", cpu->running);
-    fprintf(log, "has_waiter = %d\n", cpu->has_waiter);
-    fprintf(log, "thread_kicked = %d\n", cpu->thread_kicked);
-    fprintf(log, "created = %d\n", cpu->created);
-    fprintf(log, "stop = %d\n", cpu->stop);
-    fprintf(log, "stopped = %d\n", cpu->stopped);
-    fprintf(log, "start_powered_off = %d\n", cpu->start_powered_off);
-    fprintf(log, "unplug = %d\n", cpu->unplug);
-    fprintf(log, "crash_occurred = %d\n", cpu->crash_occurred);
-    fprintf(log, "exit_request = %d\n", cpu->exit_request);
-    fprintf(log, "exclusive_context_count = %d\n", cpu->exclusive_context_count);
-    fprintf(log, "cflags_next_tb = %u\n", cpu->cflags_next_tb);
-    fprintf(log, "interrupt_request = %u\n", cpu->interrupt_request);
-    fprintf(log, "singlestep_enabled = %d\n", cpu->singlestep_enabled);
-    fprintf(log, "icount_budget = %ld\n", cpu->icount_budget);
-    fprintf(log, "icount_extra = %ld\n", cpu->icount_extra);
-    fprintf(log, "random_seed = %lu\n", cpu->random_seed);
-    fprintf(log, "cpu_index = %d\n", cpu->cpu_index);
-    fprintf(log, "cluster_index = %d\n", cpu->cluster_index);
-    fprintf(log, "tcg_cflags = %u\n", cpu->tcg_cflags);
-    fprintf(log, "halted = %u\n", cpu->halted);
-    fprintf(log, "exception_index = %d\n", cpu->exception_index);
-    fprintf(log, "vcpu_dirty = %d\n", cpu->vcpu_dirty);
-    fprintf(log, "throttle_thread_scheduled = %d\n", cpu->throttle_thread_scheduled);
-    fprintf(log, "throttle_us_per_full = %ld\n", cpu->throttle_us_per_full);
-    fprintf(log, "ignore_memory_transaction_failures = %d\n", cpu->ignore_memory_transaction_failures);
-    fprintf(log, "prctl_unalign_sigbus = %d\n", cpu->prctl_unalign_sigbus);
+    fprintf(log, "dump_CPUState:\n");
+    fprintf(log, "\tnr_cores = %d\n", cpu->nr_cores);
+    fprintf(log, "\tnr_threads = %d\n", cpu->nr_threads);
+    fprintf(log, "\tthread_id = %d\n", cpu->thread_id);
+    fprintf(log, "\trunning = %d\n", cpu->running);
+    fprintf(log, "\thas_waiter = %d\n", cpu->has_waiter);
+    fprintf(log, "\tthread_kicked = %d\n", cpu->thread_kicked);
+    fprintf(log, "\tcreated = %d\n", cpu->created);
+    fprintf(log, "\tstop = %d\n", cpu->stop);
+    fprintf(log, "\tstopped = %d\n", cpu->stopped);
+    fprintf(log, "\tstart_powered_off = %d\n", cpu->start_powered_off);
+    fprintf(log, "\tunplug = %d\n", cpu->unplug);
+    fprintf(log, "\tcrash_occurred = %d\n", cpu->crash_occurred);
+    fprintf(log, "\texit_request = %d\n", cpu->exit_request);
+    fprintf(log, "\texclusive_context_count = %d\n", cpu->exclusive_context_count);
+    fprintf(log, "\tcflags_next_tb = %u\n", cpu->cflags_next_tb);
+    fprintf(log, "\tinterrupt_request = %u\n", cpu->interrupt_request);
+    fprintf(log, "\tsinglestep_enabled = %d\n", cpu->singlestep_enabled);
+    fprintf(log, "\ticount_budget = %ld\n", cpu->icount_budget);
+    fprintf(log, "\ticount_extra = %ld\n", cpu->icount_extra);
+    fprintf(log, "\trandom_seed = %lu\n", cpu->random_seed);
+    fprintf(log, "\tcpu_index = %d\n", cpu->cpu_index);
+    fprintf(log, "\tcluster_index = %d\n", cpu->cluster_index);
+    fprintf(log, "\ttcg_cflags = %u\n", cpu->tcg_cflags);
+    fprintf(log, "\thalted = %u\n", cpu->halted);
+    fprintf(log, "\texception_index = %d\n", cpu->exception_index);
+    fprintf(log, "\tvcpu_dirty = %d\n", cpu->vcpu_dirty);
+    fprintf(log, "\tthrottle_thread_scheduled = %d\n", cpu->throttle_thread_scheduled);
+    fprintf(log, "\tthrottle_us_per_full = %ld\n", cpu->throttle_us_per_full);
+    fprintf(log, "\tignore_memory_transaction_failures = %d\n", cpu->ignore_memory_transaction_failures);
+    fprintf(log, "\tprctl_unalign_sigbus = %d\n", cpu->prctl_unalign_sigbus);
 
     qemu_log_unlock(log);
 }
