@@ -1104,7 +1104,11 @@ void HELPER(syscall_spy)(CPUArchState *env)
     }
     if (env->regs[7] == ACCEPT) {
         if (system_started && !forkserver_started && !afl_wants_cpu_to_stop) {
-            afl_wants_cpu_to_stop = 1;
+            static int request_count = 0;
+            request_count++;
+            if (request_count == 1) {
+                afl_wants_cpu_to_stop = 1;
+            }
         }
     }
 }

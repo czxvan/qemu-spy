@@ -829,7 +829,7 @@ void tcg_register_thread(void)
 
 void tcg_reuse_thread(void)
 {
-    tcg_ctx = tcg_ctxs[tcg_cur_ctxs - 1];
+    tcg_ctx = qatomic_read(&tcg_ctxs[tcg_cur_ctxs - 1]);
 }
 #endif /* !CONFIG_USER_ONLY */
 

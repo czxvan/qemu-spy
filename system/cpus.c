@@ -46,6 +46,7 @@
 #include "hw/boards.h"
 #include "hw/hw.h"
 #include "trace.h"
+#include "plugin_spy/aflspy.h"
 
 #ifdef CONFIG_LINUX
 
@@ -647,8 +648,18 @@ const AccelOpsClass *cpus_get_accel(void)
     return cpus_accel;
 }
 
+int afl_qemuloop_pipe[2];
+
 void qemu_init_vcpu(CPUState *cpu)
 {
+    // Set pipe fd handler to receive signals from the fn thread
+    if (!forkserver_started) {
+        if(pipe(afl_qemuloop_pipe) == -1) {
+            perror("pipe");
+            exit(1);
+        }
+        qemu_set_fd_handler(afl_qemuloop_pipe[0], qemuloopPipeHandler, NULL, NULL);
+    }
     MachineState *ms = MACHINE(qdev_get_machine());
 
     cpu->nr_cores = machine_topo_get_cores_per_socket(ms);
@@ -667,9 +678,129 @@ void qemu_init_vcpu(CPUState *cpu)
     /* accelerators all implement the AccelOpsClass */
     g_assert(cpus_accel != NULL && cpus_accel->create_vcpu_thread != NULL);
     cpus_accel->create_vcpu_thread(cpu);
-
+    qemu_log("reach qemu_init_vcpu 1, process: %d\n", getpid());
     while (!cpu->created) {
         qemu_cond_wait(&qemu_cpu_cond, &bql);
+    }
+}
+
+CPUState *snapshot_cpu = NULL;
+CPUState *backup_cpu = NULL;
+CPUArchState *backup_env = NULL;
+
+void qemuloopPipeHandler(void *data)
+{
+    char msg[4];
+
+    if (read(afl_qemuloop_pipe[0], msg, 4) != 4) {
+        perror("read");
+        exit(2);
+    }
+
+    if (!strncmp(msg, "FORK", 4)) {
+
+        afl_setup();
+        CPUArchState *env = cpu_env(snapshot_cpu);
+
+        afl_forkserver(env);
+
+        // Resume vcpu thread in child process
+        LOG_STATEMENT("Before qemu_init_vcpu, process: %d\n", getpid());
+        QTAILQ_FIRST(&cpus_queue) = snapshot_cpu;
+        qemu_init_vcpu(snapshot_cpu);
+        LOG_STATEMENT("After qemu_init_vcpu, process: %d\n", getpid());
+        cpu_resume(snapshot_cpu);
+    }
+}
+
+void afl_setup(void)
+{
+    // rcu_disable_atfork();
+    return;
+}
+
+
+void afl_forkserver(CPUArchState *env)
+{
+    forkserver_started = true;
+    {
+        int child_pid = fork();
+        // to debug conveniently, reuse the parent process
+        if (child_pid == 0) {
+            LOG_STATEMENT("fork child process: %d\n", getpid());
+            return;
+        } else {
+            int status;
+            wait(&status);
+            LOG_STATEMENT("child process %d exited, status: %d\n", child_pid, status);
+            exit(0);
+
+            // while (1)
+            // {
+            //     sleep(5);
+            //     LOG_STATEMENT("child process %d is still alive\n", getpid());
+            // }
+            
+        }
+        
+    }
+    
+    // pid_t afl_forksrv_pid = getpid();
+    static char received_buf[5];
+
+    if(write(STATE_WRITE_FD, "RDY!", 4) == 4) {
+        LOG_STATEMENT("Sent to state pipe: RDY!\n");
+    } else {
+        LOG_STATEMENT("Error writing to state pipe\n");
+        LOG_STATEMENT("Not start from afl, don't fork\n")
+        return;
+    }
+
+    if(read(CTL_READ_FD, received_buf, 4) == 4
+        && strncmp(received_buf, "FORK", 4) == 0) {
+        LOG_STATEMENT("Received from ctl pipe: %s\n", received_buf);
+    } else {
+        LOG_STATEMENT("Error reading from ctl pipe\n");
+        exit(2);
+    }
+
+    while(1) {
+        pid_t child_pid = 0;
+        // uint32_t status;
+        // uint32_t t_fd[2];
+
+
+        if(read(CTL_READ_FD, received_buf, 4) == 4) {
+            LOG_STATEMENT("Received from ctl pipe: %s\n", received_buf);
+
+            if(strncmp(received_buf, "STRT", 4) == 0) {
+                child_pid = fork();
+                if (child_pid == 0) {
+                    // dispatch child process to deal with the next text
+                    LOG_STATEMENT("fork and return child process: %d\n", getpid());
+                    return;
+                }
+            } else if (strncmp(received_buf, "DONE", 4) == 0) {
+                // kill the last child pid
+                if (kill(child_pid, SIGTERM) == 0) {
+                    LOG_STATEMENT("Process with PID %d has been killed.\n", child_pid);
+                } else {
+                    LOG_STATEMENT("Failed to kill process with PID %d.\n", child_pid);
+                }
+                // return the last test case result state
+                if(write(STATE_WRITE_FD, "GOOD", 4) == 4) {
+                    LOG_STATEMENT("Sent to state pipe: GOOD\n");
+                } else {
+                    LOG_STATEMENT("Error writing to state pipe\n");
+                    exit(2);
+                }
+            }
+        }
+        else {
+            LOG_STATEMENT("Error reading from ctl pipe\n");
+            exit(2);
+        }
+            
     }
 }
 

@@ -83,7 +83,6 @@ static void *mttcg_cpu_thread_fn(void *arg)
         tcg_register_thread();
     } else {
         // Assume that there is always one thread and reuse the tcg_ctx
-        cpu->stopped = 0;
         tcg_reuse_thread();
     }
     
@@ -106,6 +105,7 @@ static void *mttcg_cpu_thread_fn(void *arg)
             cpu_dump_state(cpu, logfile, CPU_DUMP_CODE | CPU_DUMP_VPU);
             qemu_log_unlock(logfile);
         }
+        qemu_log("reach mttcg_cpu_thread_fn 1, process: %d\n", getpid());
     }
 
     do {
@@ -135,12 +135,21 @@ static void *mttcg_cpu_thread_fn(void *arg)
         }
 
         qatomic_set_mb(&cpu->exit_request, 0);
+        if (count == 2) {
+            qemu_log("reach mttcg_cpu_thread_fn 2, process: %d\n", getpid());
+        }
         qemu_wait_io_event(cpu);
+        if (count == 2) {
+            qemu_log("reach mttcg_cpu_thread_fn 3, process: %d\n", getpid());
+        }
     } while (!afl_wants_cpu_to_stop && (!cpu->unplug || cpu_can_run(cpu)));
+
+    qemu_log("reach mttcg_cpu_thread_fn 4, process: %d\n", getpid());
 
     if(afl_wants_cpu_to_stop) {
         afl_wants_cpu_to_stop = 0;
-        snapshot_cpu = first_cpu;
+        // Deal with worker threads.
+        qemu_wait_io_event(cpu);
 
         tcg_cpu_destroy(cpu);
         bql_unlock();
@@ -149,15 +158,8 @@ static void *mttcg_cpu_thread_fn(void *arg)
 
         // Maybe we should reccord the cpu's pc and other registers here
         // But how about the stack and other memory?
-        forkserver_started = 1;
-        cpu_disable_ticks();
-        qemu_wait_io_event(cpu);
 
-        QTAILQ_FIRST(&cpus_queue) = NULL; // for what?
-        if (write(afl_qemuloop_pipe[1], "FORK", 4) != 4) {
-            perror("write");
-            exit(2);
-        }
+        
         dump_CPUState(cpu);
         FILE *logfile = qemu_log_trylock();
         if(logfile) {
@@ -169,6 +171,14 @@ static void *mttcg_cpu_thread_fn(void *arg)
         memcpy(backup_cpu, cpu, sizeof(CPUState));
         memcpy(backup_env, cpu_env(cpu), sizeof(CPUArchState));
         // goto again;
+        snapshot_cpu = first_cpu;
+        QTAILQ_FIRST(&cpus_queue) = NULL;
+        current_cpu = NULL;
+        if (write(afl_qemuloop_pipe[1], "FORK", 4) != 4) {
+            perror("write");
+            exit(2);
+        }
+        
         return NULL;
     }
     tcg_cpu_destroy(cpu);

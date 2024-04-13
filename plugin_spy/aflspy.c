@@ -9,7 +9,6 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_version = QEMU_PLUGIN_VERSION;
 
 static const char *QEMU_MODE = NULL;
 static uint32_t target_ctx = 0;
-static gboolean system_started = false;
 
 
 void vcpu_insn_trans(qemu_plugin_id_t id,
@@ -131,9 +130,9 @@ void vcpu_syscall_spy(qemu_plugin_id_t id,
             }
         } break;
         case EXECVE: {
-            if (strstr(info->params.execve_params->filename, SYSTEM_STARTED_INDICATOR_PROCESS) != NULL) {
-                system_started = true;
-            }
+            // if (strstr(info->params.execve_params->filename, SYSTEM_STARTED_INDICATOR_PROCESS) != NULL) {
+            //     system_started = true;
+            // }
             if (log_execve) {
                 g_autofree gchar *log = g_strdup_printf(
                     "ctx: %08x  execve  %s\n"
