@@ -1,0 +1,31 @@
+{
+    "files.associations": {
+        "*.m": "matlab",
+        "osdep.h": "c",
+        "plugin.h": "c",
+        "inttypes.h": "c",
+        "stdio.h": "c",
+        "qemu-plugin-spy.h": "c",
+        "glib.h": "c",
+        "unistd.h": "c",
+        "qemu-plugin.h": "c",
+        "poison.h": "c",
+        "config-poison.h": "c",
+        "helper-proto-common.h": "c",
+        "random": "c",
+        "*.inc": "c",
+        "cmath": "c",
+        "plugin-memory.h": "c",
+        "oversized-guest.h": "c",
+        "asio.hpp": "c",
+        "complex": "c",
+        "*.idef": "c",
+        "*.ipp": "c",
+        "*.tcc": "c",
+        "cpu.h": "c",
+        "type_traits": "c",
+        "cpus.h": "c",
+        "*.def": "c"
+    },
+    "C_Cpp.errorSquiggles": "disabled"
+}

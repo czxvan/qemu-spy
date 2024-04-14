@@ -3,7 +3,7 @@
 /plugin_spy/build/
 /plugin_spy/test/qemu_log.txt
 /.cache/
-/.vscode/
+# /.vscode/
 *.pyc
 .sdk
 .stgit-*
