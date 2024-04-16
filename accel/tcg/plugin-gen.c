@@ -53,6 +53,7 @@
 #include "exec/translator.h"
 #include "exec/helper-proto-common.h"
 #include "plugin_spy/aflspy.h"
+#include "qemu/log.h"
 
 #define HELPER_H  "accel/tcg/plugin-helpers.h"
 #include "exec/helper-info.c.inc"
@@ -1100,6 +1101,7 @@ void HELPER(syscall_spy)(CPUArchState *env)
         if (g_strcmp0(data->params.execve_params->filename, 
                     SYSTEM_STARTED_INDICATOR_PROCESS) == 0) {
             system_started = 1;
+            // afl_wants_cpu_to_stop = 1; // test
         }
     }
     if (env->regs[7] == ACCEPT) {
@@ -1108,6 +1110,11 @@ void HELPER(syscall_spy)(CPUArchState *env)
             request_count++;
             if (request_count == 1) {
                 afl_wants_cpu_to_stop = 1;
+                // qemu_loglevel |= CPU_LOG_EXEC;
+                // qemu_loglevel |= CPU_LOG_TB_OP | CPU_LOG_TB_IN_ASM | CPU_LOG_TB_OUT_ASM;
+
+                // Add kick to make sequence more deterministic
+                qemu_cpu_kick(cpu); 
             }
         }
     }

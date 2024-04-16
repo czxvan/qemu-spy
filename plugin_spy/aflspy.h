@@ -161,10 +161,11 @@ extern int afl_qemuloop_pipe[2];
 extern CPUState *snapshot_cpu;
 extern CPUState *backup_cpu;
 extern CPUArchState *backup_env;
-
+extern uint32_t vcpu_thread_count;
 void qemuloopPipeHandler(void *data);
 void afl_setup(void);
 void afl_forkserver(CPUArchState *env);
+void spawn_thread_after_fork(void);
 
 void dump_CPUState(CPUState *cpu);
 

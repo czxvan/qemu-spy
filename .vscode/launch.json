@@ -61,6 +61,16 @@
               "text": "-enable-pretty-printing",
               "ignoreFailures": true
             },
+            {
+              "description": "设置GDB在fork后掌控子进程",
+              "text": "-gdb-set detach-on-fork off",
+              "ignoreFailures": true
+            },
+            {
+              "description": "设置GDB在fork后跟踪子进程",
+              "text": "-gdb-set follow-fork-mode child",
+              "ignoreFailures": true
+            }
           ]
       },
         {

@@ -31,6 +31,8 @@
 #include "qemu/notify.h"
 #include "qemu/guest-random.h"
 #include "qemu/log.h"
+#include "exec/tb-flush.h"
+#include "exec/cpu_ldst.h"
 #include "exec/exec-all.h"
 #include "hw/boards.h"
 #include "tcg/startup.h"
@@ -63,7 +65,7 @@ static void mttcg_force_rcu(Notifier *notify, void *data)
  * variable current_cpu can be used deep in the code to find the
  * current CPUState for a given thread.
  */
-
+uint32_t vcpu_thread_count = 0;
 static void *mttcg_cpu_thread_fn(void *arg)
 {
 // again:
@@ -77,9 +79,8 @@ static void *mttcg_cpu_thread_fn(void *arg)
     force_rcu.notifier.notify = mttcg_force_rcu;
     force_rcu.cpu = cpu;
     rcu_add_force_rcu_notifier(&force_rcu.notifier);
-    static gboolean count = 0;
-    count ++;
-    if (count == 1) {
+    vcpu_thread_count ++;
+    if (vcpu_thread_count == 1) {
         tcg_register_thread();
     } else {
         // Assume that there is always one thread and reuse the tcg_ctx
@@ -98,17 +99,11 @@ static void *mttcg_cpu_thread_fn(void *arg)
     /* process any pending work */
     cpu->exit_request = 1;
 
-    if (count == 2) {
-        dump_CPUState(cpu);
-        FILE *logfile = qemu_log_trylock();
-        if(logfile) {
-            cpu_dump_state(cpu, logfile, CPU_DUMP_CODE | CPU_DUMP_VPU);
-            qemu_log_unlock(logfile);
-        }
-        qemu_log("reach mttcg_cpu_thread_fn 1, process: %d\n", getpid());
-    }
-
     do {
+        if (vcpu_thread_count == 2) {
+            dump_CPUState(cpu);
+            dump_CPUState(first_cpu);
+        }
         if (cpu_can_run(cpu)) {
             int r;
             bql_unlock();
@@ -135,20 +130,19 @@ static void *mttcg_cpu_thread_fn(void *arg)
         }
 
         qatomic_set_mb(&cpu->exit_request, 0);
-        if (count == 2) {
-            qemu_log("reach mttcg_cpu_thread_fn 2, process: %d\n", getpid());
-        }
         qemu_wait_io_event(cpu);
-        if (count == 2) {
-            qemu_log("reach mttcg_cpu_thread_fn 3, process: %d\n", getpid());
-        }
     } while (!afl_wants_cpu_to_stop && (!cpu->unplug || cpu_can_run(cpu)));
 
     qemu_log("reach mttcg_cpu_thread_fn 4, process: %d\n", getpid());
 
     if(afl_wants_cpu_to_stop) {
+        smp_mb();
         afl_wants_cpu_to_stop = 0;
+
+        cpu_disable_ticks();
         // Deal with worker threads.
+        dump_CPUState(cpu);
+        dump_CPUState(first_cpu);
         qemu_wait_io_event(cpu);
 
         tcg_cpu_destroy(cpu);
@@ -160,25 +154,28 @@ static void *mttcg_cpu_thread_fn(void *arg)
         // But how about the stack and other memory?
 
         
+        // dump_CPUState(cpu);
+        // FILE *logfile = qemu_log_trylock();
+        // if(logfile) {
+        //     cpu_dump_state(cpu, logfile, CPU_DUMP_CODE | CPU_DUMP_VPU);
+        //     qemu_log_unlock(logfile);
+        // }
+        // backup_cpu = g_new0(CPUState, 1);
+        // backup_env = g_new0(CPUArchState, 1);
+        // memcpy(backup_cpu, cpu, sizeof(CPUState));
+        // memcpy(backup_env, cpu_env(cpu), sizeof(CPUArchState));
+        // snapshot_cpu = first_cpu;
+        // QTAILQ_FIRST(&cpus_queue) = NULL;
         dump_CPUState(cpu);
-        FILE *logfile = qemu_log_trylock();
-        if(logfile) {
-            cpu_dump_state(cpu, logfile, CPU_DUMP_CODE | CPU_DUMP_VPU);
-            qemu_log_unlock(logfile);
-        }
-        backup_cpu = g_new0(CPUState, 1);
-        backup_env = g_new0(CPUArchState, 1);
-        memcpy(backup_cpu, cpu, sizeof(CPUState));
-        memcpy(backup_env, cpu_env(cpu), sizeof(CPUArchState));
-        // goto again;
-        snapshot_cpu = first_cpu;
-        QTAILQ_FIRST(&cpus_queue) = NULL;
-        current_cpu = NULL;
+        dump_CPUState(first_cpu);
+        
+        // tcg_flush_jmp_cache(first_cpu);
+        // tlb_flush(first_cpu);
+        // tb_flush(first_cpu);
         if (write(afl_qemuloop_pipe[1], "FORK", 4) != 4) {
             perror("write");
             exit(2);
         }
-        
         return NULL;
     }
     tcg_cpu_destroy(cpu);
@@ -212,12 +209,123 @@ void mttcg_start_vcpu_thread(CPUState *cpu)
                        cpu, QEMU_THREAD_JOINABLE);
 }
 
+#include <linux/sched.h>    /* Definition of struct clone_args */
+#include <sched.h>          /* Definition of CLONE_* constants */
+#include <sys/syscall.h>    /* Definition of SYS_* constants */
+
+void afl_forkserver(CPUArchState *env)
+{
+    forkserver_started = true;
+    uint64_t phys_pc =  get_page_addr_code(env, 0xffff0008);
+    qemu_log("phys_pc: %08lx\n", phys_pc);
+    uint32_t insn = cpu_ldl_code(env, 0xffff0008);
+    qemu_log("insn: %08x\n", insn);
+    {
+        smp_mb();
+        dump_CPUState(first_cpu);
+
+        // struct clone_args args = {
+        //     // .flags = CLONE_VM | CLONE_VFORK, // Share memory to avoid segmentation fault
+        //     .exit_signal = SIGCHLD,
+        // };
+        int child_pid = fork();
+        // int child_pid = syscall(SYS_clone3, &args, sizeof(struct clone_args));
+        // to debug conveniently, reuse the parent process
+
+        if (child_pid == 0) {
+            // odd bug1: qatomic_read solved_by_preread
+            // phys_pc =  get_page_addr_code(env, 0xffff0008);
+            // qemu_log("phys_pc: %lx\n", phys_pc);
+            // odd bug2: load_atom_4 unsolved
+            // insn = cpu_ldl_code(env, 0xffff0008);
+            // qemu_log("insn: %08x\n", insn);
+            qemu_log("fork child process: %d\n", getpid());
+            return;
+        } else {
+            qemu_log("parent process: get child process %d\n", child_pid);
+            int status;
+            wait(&status);
+            qemu_log("parent process: child process %d exited, status: %d\n", child_pid, status);
+            exit(0);
+
+            // while (1)
+            // {
+            //     sleep(5);
+            //     qemu_log("child process %d is still alive\n", getpid());
+            // }
+            
+        }
+        
+    }
+    
+    // pid_t afl_forksrv_pid = getpid();
+    static char received_buf[5];
+
+    if(write(STATE_WRITE_FD, "RDY!", 4) == 4) {
+        qemu_log("Sent to state pipe: RDY!\n");
+    } else {
+        qemu_log("Error writing to state pipe\n");
+        qemu_log("Not start from afl, don't fork\n");
+        return;
+    }
+
+    if(read(CTL_READ_FD, received_buf, 4) == 4
+        && strncmp(received_buf, "FORK", 4) == 0) {
+        qemu_log("Received from ctl pipe: %s\n", received_buf);
+    } else {
+        qemu_log("Error reading from ctl pipe\n");
+        exit(2);
+    }
+
+    while(1) {
+        pid_t child_pid = 0;
+        // uint32_t status;
+        // uint32_t t_fd[2];
+
+
+        if(read(CTL_READ_FD, received_buf, 4) == 4) {
+            qemu_log("Received from ctl pipe: %s\n", received_buf);
+
+            if(strncmp(received_buf, "STRT", 4) == 0) {
+                child_pid = fork();
+                if (child_pid == 0) {
+                    // dispatch child process to deal with the next text
+                    qemu_log("fork and return child process: %d\n", getpid());
+                    return;
+                }
+            } else if (strncmp(received_buf, "DONE", 4) == 0) {
+                // kill the last child pid
+                if (kill(child_pid, SIGTERM) == 0) {
+                    qemu_log("Process with PID %d has been killed.\n", child_pid);
+                } else {
+                    qemu_log("Failed to kill process with PID %d.\n", child_pid);
+                }
+                // return the last test case result state
+                if(write(STATE_WRITE_FD, "GOOD", 4) == 4) {
+                    qemu_log("Sent to state pipe: GOOD\n");
+                } else {
+                    qemu_log("Error writing to state pipe\n");
+                    exit(2);
+                }
+            }
+        }
+        else {
+            qemu_log("Error reading from ctl pipe\n");
+            exit(2);
+        }
+            
+    }
+}
+
 void dump_CPUState(CPUState *cpu) {
+    static int count = 0;
+    count ++;
     FILE *log = qemu_log_trylock();
     if (log == NULL) {
         return;
     }
-    fprintf(log, "dump_CPUState:\n");
+    fprintf(log, "--------------------------------\n");
+    fprintf(log, "dump_CPUState %d:\n", count);
     fprintf(log, "\tnr_cores = %d\n", cpu->nr_cores);
     fprintf(log, "\tnr_threads = %d\n", cpu->nr_threads);
     fprintf(log, "\tthread_id = %d\n", cpu->thread_id);
@@ -248,6 +356,19 @@ void dump_CPUState(CPUState *cpu) {
     fprintf(log, "\tthrottle_us_per_full = %ld\n", cpu->throttle_us_per_full);
     fprintf(log, "\tignore_memory_transaction_failures = %d\n", cpu->ignore_memory_transaction_failures);
     fprintf(log, "\tprctl_unalign_sigbus = %d\n", cpu->prctl_unalign_sigbus);
-
     qemu_log_unlock(log);
+
+    CPUArchState *env = cpu_env(cpu);
+    FILE *logfile = qemu_log_trylock();
+    if(logfile) {
+        cpu_dump_state(cpu, logfile, CPU_DUMP_CODE | CPU_DUMP_VPU);
+        fprintf(logfile, "pgdir = %08x %08x %08x %08x\n"
+                , (uint32_t)env->cp15.ttbr0_el[1]
+                , (uint32_t)env->cp15.ttbr0_el[3]
+                , (uint32_t)env->cp15.ttbr1_el[1]
+                , (uint32_t)env->cp15.ttbr1_el[3]
+                );
+        fprintf(logfile, "--------------------------------\n");
+        qemu_log_unlock(logfile);
+    }
 }

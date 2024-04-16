@@ -1,7 +1,7 @@
 /GNUmakefile
 /build/
 /plugin_spy/build/
-/plugin_spy/test/qemu_log.txt
+/plugin_spy/test/*.txt
 /.cache/
 # /.vscode/
 *.pyc
