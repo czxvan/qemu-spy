@@ -1,3 +1,4 @@
+#define __AFL_SPY_C__
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,8 +9,6 @@
 QEMU_PLUGIN_EXPORT int qemu_plugin_version = QEMU_PLUGIN_VERSION;
 
 static const char *QEMU_MODE = NULL;
-static uint32_t target_ctx = 0;
-
 
 void vcpu_insn_trans(qemu_plugin_id_t id,
                             CPUState *cpu, CPUArchState *env,
@@ -28,12 +27,65 @@ void vcpu_tb_exec_spy(qemu_plugin_id_t id,
                         void *data)
 {
     TBInfo *info = (TBInfo *)data;
-    gboolean log_tb_exec_spy = LOG_MASK(true);
-    
-    if (log_tb_exec_spy)
-        LOG_STATEMENT("ctx: %08x  tb_exec pc: %08x\n"
-                        , info->ctx
-                        , info->pc);
+
+    static uint64_t count = 0;
+    gboolean log_tb_exec_spy = LOG_MASK(false);
+    gboolean log_coverage_info = LOG_MASK(false);
+
+    if(is_trace_enabled()) {
+        // MEM_BARRIER();
+        if (info->ctx == target_ctx && info->pc < 0x01000000) {
+            count++;
+            afl_maybe_log(info->pc);
+            if (log_tb_exec_spy) {
+                LOG_STATEMENT("ctx: %08x  tb_exec pc: %08x\n"
+                                , info->ctx
+                                , info->pc);
+            }
+        }
+    } else if (count > 0) {
+        LOG_STATEMENT("tb count: %ld\n", count);
+        count = 0;
+
+        // print coverage info
+        int count = 0;
+        for (int i = 0; i < MAP_SIZE; i++) {
+            if (coverage_info[i] > 0 || trace_bits[i] > 0) {
+                count++;
+            }
+        }
+        LOG_STATEMENT("coverage_info count: %d\n", count);
+        if (log_coverage_info) {
+            for (int i = 0; i < MAP_SIZE; i++) {
+                if (coverage_info[i] > 0 || trace_bits[i] > 0) {
+                    LOG_STATEMENT("coverage_info[%d]: %d trace_bits[%d]: %d \n", i, coverage_info[i], i, trace_bits[i]);
+                }
+            }
+        }
+        memset(coverage_info, 0, MAP_SIZE);
+    }
+}
+
+void vcpu_exception_spy(qemu_plugin_id_t id,
+                            CPUState *cpu, CPUArchState *env,
+                            void *data)
+{
+    ExceptionInfo *info = (ExceptionInfo *)data;
+    gboolean log_exception_spy = LOG_MASK(false);
+    if (system_started && info->ctx == target_ctx) {
+        if (log_exception_spy)
+            LOG_STATEMENT("ctx: %08x  excp: %08x  syndrome: %08x  "
+                            "target_el: %d  EC: %x\n"
+                            , info->ctx
+                            , info->excp
+                            , info->syndrome
+                            , info->target_el
+                            , info->exception_class);
+        if (info->exception_class == 0x25) {
+            LOG_STATEMENT("ctx: %08x  Target Context reset from EXCEPTION 25\n"
+                          , info->ctx);
+        }
+    }
 }
 
 void vcpu_syscall_spy(qemu_plugin_id_t id,
@@ -43,33 +95,39 @@ void vcpu_syscall_spy(qemu_plugin_id_t id,
     SyscallInfo *info = (SyscallInfo *)data;
 
     gboolean log_exit = LOG_MASK(true);
-    gboolean log_fork = LOG_MASK(true);
-    gboolean log_read = LOG_MASK(true) || QEMU_USER_MODE;
-    gboolean log_write = LOG_MASK(true) || QEMU_USER_MODE;
-    gboolean log_open = LOG_MASK(true) || QEMU_USER_MODE;
-    gboolean log_close = LOG_MASK(false) || QEMU_USER_MODE;
-    gboolean log_execve = LOG_MASK(true);
-    gboolean log_clone = LOG_MASK(true);
+    gboolean log_fork = LOG_MASK(false);
+    gboolean log_read = LOG_MASK(false) || QEMU_USER_MODE;
+    gboolean log_write = LOG_MASK(false) || QEMU_USER_MODE;
+    gboolean log_open = LOG_MASK(false) || QEMU_USER_MODE;
+    gboolean log_close = LOG_MASK(true) || QEMU_USER_MODE;
+    gboolean log_execve = LOG_MASK(false);
+    gboolean log_clone = LOG_MASK(false);
     gboolean log_send = LOG_MASK(true) || QEMU_USER_MODE;
     gboolean log_sendto = LOG_MASK(true) || QEMU_USER_MODE;
-    gboolean log_recv = LOG_MASK(true) || QEMU_USER_MODE;
-    gboolean log_recvfrom = LOG_MASK(true) || QEMU_USER_MODE;
+    gboolean log_sendmsg = LOG_MASK(true) || QEMU_USER_MODE;
+    gboolean log_recv = LOG_MASK(false) || QEMU_USER_MODE;
+    gboolean log_recvfrom = LOG_MASK(false) || QEMU_USER_MODE;
 
     gboolean log_socket = LOG_MASK(true) || QEMU_USER_MODE;
-    gboolean log_bind = LOG_MASK(true) || QEMU_USER_MODE;
-    gboolean log_listen = LOG_MASK(true) || QEMU_USER_MODE;
+    gboolean log_bind = LOG_MASK(false) || QEMU_USER_MODE;
+    gboolean log_listen = LOG_MASK(false) || QEMU_USER_MODE;
     gboolean log_accept = LOG_MASK(true) || QEMU_USER_MODE;
     gboolean log_default = LOG_MASK(false);
 
     switch (info->num) {
         case EXIT: {
-            if(log_exit) {
-                g_autofree gchar *log = g_strdup_printf(
-                    "ctx: %08x  exit\n"
-                    , info->ctx
-                );
-                qemu_plugin_outs(log);
+            if (system_started && info->ctx == target_ctx) {
+                if(log_exit) {
+                    g_autofree gchar *log = g_strdup_printf(
+                        "ctx: %08x  exit error_num: %d\n"
+                        , info->ctx
+                        , info->params.exit_params->error_code
+                    );
+                    qemu_plugin_outs(log);
+                }
+                LOG_STATEMENT("Target EXIT\n");
             }
+
         } break;
         case FORK: {
             if(log_fork) {
@@ -93,20 +151,14 @@ void vcpu_syscall_spy(qemu_plugin_id_t id,
         } break;
         case WRITE: {
             if (log_write) {
-                if (info->params.write_params->fd == 5 &&
-                    info->params.write_params->count == 8 ||
-                    info->params.write_params->fd == 7 &&
-                    info->params.write_params->count == 1)
-                    break;
-                g_autofree gchar *log = g_strdup_printf(
-                    "ctx: %08x  write  into %d %d bytes\n"
-                    "\t%s\n"
-                    , info->ctx
-                    , info->params.write_params->fd
-                    , info->params.write_params->count
-                    , info->params.write_params->buf
-                );
-                qemu_plugin_outs(log);
+                if (info->params.write_params->count > 4) {
+                    LOG_STATEMENT("ctx: %08x  write  into %d %d bytes\n"
+                                  "\t%s\n"
+                                  , info->ctx
+                                  , info->params.write_params->fd
+                                  , info->params.write_params->count
+                                  , info->params.write_params->buf);
+                }
             }
         } break;
         case OPEN: {
@@ -130,9 +182,19 @@ void vcpu_syscall_spy(qemu_plugin_id_t id,
             }
         } break;
         case EXECVE: {
-            // if (strstr(info->params.execve_params->filename, SYSTEM_STARTED_INDICATOR_PROCESS) != NULL) {
-            //     system_started = true;
-            // }
+            // Use strstr instead of g_strcmp0 to wildcard match
+            if (!system_started &&
+                strstr(info->params.execve_params->filename, SYSTEM_STARTED_INDICATOR_PROCESS) != NULL)
+            {
+                system_started = true;
+                afl_setup();
+                LOG_STATEMENT("System Started.\n");
+                if (write(STATE_WRITE_FD, "RDY!", 4) != 4) {
+                    LOG_ERROR("Failed to write RDY! to STATE_WRITE_FD\n");
+                } else {
+                    LOG_STATEMENT("Wrote RDY! to STATE_WRITE_FD\n");
+                }
+            }
             if (log_execve) {
                 g_autofree gchar *log = g_strdup_printf(
                     "ctx: %08x  execve  %s\n"
@@ -152,6 +214,12 @@ void vcpu_syscall_spy(qemu_plugin_id_t id,
             }
         } break;
         case SEND: {
+            if (system_started && info->ctx == target_ctx) {
+                if (spy_signal->next_step == 0 && is_trace_enabled()) {
+                    spy_signal->next_step = 1;
+                    LOG_STATEMENT("Target SEND\n");
+                }
+            }
             if (log_send) {
                 g_autofree gchar *log = g_strdup_printf(
                     "ctx: %08x  send %d bytes to %d, flags: %d\n"
@@ -177,6 +245,12 @@ void vcpu_syscall_spy(qemu_plugin_id_t id,
             }
         } break;
         case SENDTO: {
+            if (system_started && info->ctx == target_ctx) {
+                if (spy_signal->next_step == 0 && is_trace_enabled()) {
+                    spy_signal->next_step = 1;
+                    LOG_STATEMENT("Target SENDTO\n");
+                }
+            }
             if (log_sendto) {
                 g_autofree gchar *log = g_strdup_printf(
                     "ctx: %08x  sendto %d bytes to %d, flags: %d, dest_addr: %08x, dest_len: %d\n"
@@ -201,6 +275,23 @@ void vcpu_syscall_spy(qemu_plugin_id_t id,
                     qemu_plugin_outs(log);
                 }
                 qemu_plugin_outs("\n");
+            }
+        } break;
+        case SENDMSG: {
+            if (system_started && info->ctx == target_ctx) {
+                if (spy_signal->next_step == 0 && is_trace_enabled()) {
+                    spy_signal->next_step = 1;
+                    LOG_STATEMENT("Target SENDMSG\n");
+                }
+            }
+            if (log_sendmsg) {
+                g_autofree gchar *log = g_strdup_printf(
+                    "ctx: %08x  sendmsg to %d flags: %x\n"
+                    , info->ctx
+                    , info->params.send_params->sockfd
+                    , info->params.send_params->flags
+                );
+                qemu_plugin_outs(log);
             }
         } break;
         case RECV: {
@@ -265,8 +356,14 @@ void vcpu_syscall_spy(qemu_plugin_id_t id,
             }
         } break;
         case ACCEPT: {
-            if (system_started && !target_ctx) {
-                target_ctx = info->ctx;
+            if (system_started) {
+                if (!agent_ctx) {
+                    set_agent_ctx(info->ctx);
+                } else if (!target_ctx && info->ctx != agent_ctx) {
+                    set_target_ctx(info->ctx);
+                } else if (target_ctx && info->ctx == agent_ctx) {
+                    target_ctx = 0;
+                }
             }
             if (log_accept) {
                 g_autofree gchar *log = g_strdup_printf(
@@ -303,5 +400,6 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
     qemu_plugin_register_vcpu_insn_trans_cb(id, vcpu_insn_trans);
     qemu_plugin_register_vcpu_syscall_spy_cb(id, vcpu_syscall_spy);
     qemu_plugin_register_vcpu_tb_exec_spy_cb(id, vcpu_tb_exec_spy);
+    qemu_plugin_register_vcpu_exception_spy_cb(id, vcpu_exception_spy);
     return 0;
 }

@@ -25,6 +25,8 @@
 #include "exec/exec-all.h"
 #include "exec/cpu_ldst.h"
 #include "cpregs.h"
+#include "qemu/log.h"
+#include "exec/plugin-gen.h"
 
 #define SIGNBIT (uint32_t)0x80000000
 #define SIGNBIT64 ((uint64_t)1 << 63)
@@ -66,6 +68,8 @@ void raise_exception(CPUARMState *env, uint32_t excp,
     cs->exception_index = excp;
     env->exception.syndrome = syndrome;
     env->exception.target_el = target_el;
+    plugin_gen_exception_spy(env_cpu(env), excp, syndrome, target_el);
+    
     cpu_loop_exit(cs);
 }
 

@@ -1000,6 +1000,11 @@ void HELPER(syscall_spy)(CPUArchState *env)
     data->num = env->regs[7];
     data->ctx = env->cp15.ttbr0_el[3];
     switch (env->regs[7]) {
+        case EXIT: {
+            ExitParams *exit_params = g_new0(ExitParams, 1);
+            exit_params->error_code = env->regs[0];
+            data->params.exit_params = exit_params;
+        } break;
         case READ: {
             ReadParams *read_params = g_new0(ReadParams, 1);
             read_params->fd = env->regs[0];
@@ -1047,6 +1052,13 @@ void HELPER(syscall_spy)(CPUArchState *env)
             sendto_params->dest_addr = env->regs[4];
             sendto_params->dest_len = env->regs[5];
             data->params.sendto_params = sendto_params;
+        } break;
+        case SENDMSG: {
+            SendmsgParams *sendmsg_params = g_new0(SendmsgParams, 1);
+            sendmsg_params->sockfd = env->regs[0];
+            sendmsg_params->msg = NULL;
+            sendmsg_params->flags = env->regs[2];
+            data->params.sendmsg_params = sendmsg_params;
         } break;
         case RECV: {
             RecvParams *recv_params = g_new0(RecvParams, 1);
@@ -1096,28 +1108,6 @@ void HELPER(syscall_spy)(CPUArchState *env)
         
     }
     qemu_plugin_syscall_spy_cb(cpu, env, data);
-
-    if (env->regs[7] == EXECVE && !system_started) {
-        if (g_strcmp0(data->params.execve_params->filename, 
-                    SYSTEM_STARTED_INDICATOR_PROCESS) == 0) {
-            system_started = 1;
-            // afl_wants_cpu_to_stop = 1; // test
-        }
-    }
-    if (env->regs[7] == ACCEPT) {
-        if (system_started && !forkserver_started && !afl_wants_cpu_to_stop) {
-            static int request_count = 0;
-            request_count++;
-            if (request_count == 1) {
-                afl_wants_cpu_to_stop = 1;
-                // qemu_loglevel |= CPU_LOG_EXEC;
-                // qemu_loglevel |= CPU_LOG_TB_OP | CPU_LOG_TB_IN_ASM | CPU_LOG_TB_OUT_ASM;
-
-                // Add kick to make sequence more deterministic
-                qemu_cpu_kick(cpu); 
-            }
-        }
-    }
 }
 
 void plugin_gen_tlb_set_spy(CPUState* cpu, vaddr addr, hwaddr paddr, int prot, int mmu_idx)
@@ -1130,6 +1120,20 @@ void plugin_gen_tlb_set_spy(CPUState* cpu, vaddr addr, hwaddr paddr, int prot, i
     data->prot = prot;
     data->mmu_idx = mmu_idx;
     qemu_plugin_tlb_set_cb(cpu, env, data);
+}
+
+void plugin_gen_exception_spy(CPUState *cpu, uint32_t excp,
+                     uint32_t syndrome, uint32_t target_el)
+{
+    CPUArchState *env = cpu_env(cpu);
+    g_autofree ExceptionInfo *data = g_new0(ExceptionInfo, 1);
+    data->ctx = env->cp15.ttbr0_el[3];
+    data->excp = excp;
+    data->syndrome = syndrome;
+    data->target_el = target_el;
+    data->exception_class = syndrome >> 26;
+
+    qemu_plugin_exception_spy_cb(cpu, env, data);
 }
 
 gchar *guest_strdup(CPUState *cpu, uint32_t ptr)

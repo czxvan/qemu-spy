@@ -26,6 +26,8 @@ void plugin_gen_insn_end(void);
 
 void plugin_gen_tb_trans_spy(CPUState *cpu, const struct DisasContextBase *db);
 void plugin_gen_insn_trans_spy(CPUState *cpu, const struct DisasContextBase *db);
+void plugin_gen_exception_spy(CPUState *cpu, uint32_t excp,
+                     uint32_t syndrome, uint32_t target_el);
 void plugin_gen_tlb_set_spy(CPUState* cpu, vaddr addr, hwaddr paddr, int prot, int mmu_idx);
 
 void plugin_gen_disable_mem_helpers(void);
@@ -52,6 +54,11 @@ void plugin_gen_tb_trans_spy(CPUState *cpu, const struct DisasContextBase *db)
 
 static inline
 void plugin_gen_insn_trans_spy(CPUState *cpu, const struct DisasContextBase *db)
+{ }
+
+static inline
+void plugin_gen_exception_spy(CPUState *cpu, uint32_t excp,
+                     uint32_t syndrome, uint32_t target_el)
 { }
 
 static inline

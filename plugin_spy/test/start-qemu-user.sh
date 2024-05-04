@@ -3,4 +3,4 @@ export QEMU_MODE=USER
     -d plugin \
     -plugin ../build/libaflspy.so \
     -D qemu_log.txt \
-    ../build/hello-crow
+    ../build/hello-syscall

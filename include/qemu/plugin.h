@@ -63,6 +63,7 @@ union qemu_plugin_cb_sig {
     qemu_plugin_vcpu_syscall_spy_cb_t  vcpu_syscall_spy;
     qemu_plugin_vcpu_tb_exec_spy_cb_t  vcpu_tb_exec_spy;
     qemu_plugin_vcpu_tlb_set_cb_t    vcpu_tlb_set;
+    qemu_plugin_vcpu_exception_spy_cb_t vcpu_exception_spy;
     qemu_plugin_vcpu_mem_cb_t        vcpu_mem;
     qemu_plugin_vcpu_syscall_cb_t    vcpu_syscall;
     qemu_plugin_vcpu_syscall_ret_cb_t vcpu_syscall_ret;
@@ -217,6 +218,7 @@ void qemu_plugin_insn_trans_cb(CPUState *cpu, CPUArchState* env, uint32_t insn);
 void qemu_plugin_syscall_spy_cb(CPUState *cpu, CPUArchState* env, void *data);
 void qemu_plugin_tb_exec_spy_cb(CPUState *cpu, CPUArchState* env, void *data);
 void qemu_plugin_tlb_set_cb(CPUState *cpu, CPUArchState* env, void *data);
+void qemu_plugin_exception_spy_cb(CPUState *cpu, CPUArchState* env, void *data);
 void qemu_plugin_vcpu_idle_cb(CPUState *cpu);
 void qemu_plugin_vcpu_resume_cb(CPUState *cpu);
 void
@@ -309,6 +311,11 @@ static inline void qemu_plugin_tb_exec_spy_cb(CPUState *cpu,
 { }
 
 static inline void qemu_plugin_tlb_set_cb(CPUState *cpu,
+                                        CPUArchState* env,
+                                        void *data)
+{ }
+
+static inline void qemu_plugin_exception_spy_cb(CPUState *cpu,
                                         CPUArchState* env,
                                         void *data)
 { }

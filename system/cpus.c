@@ -659,7 +659,7 @@ void qemu_init_vcpu(CPUState *cpu)
             perror("pipe");
             exit(1);
         }
-        qemu_set_fd_handler(afl_qemuloop_pipe[0], qemuloopPipeHandler, NULL, NULL);
+        qemu_set_fd_handler(afl_qemuloop_pipe[0], gotPipeNotification, NULL, NULL);
     }
     MachineState *ms = MACHINE(qdev_get_machine());
 
@@ -689,7 +689,7 @@ CPUState *snapshot_cpu = NULL;
 CPUState *backup_cpu = NULL;
 CPUArchState *backup_env = NULL;
 
-void qemuloopPipeHandler(void *data)
+void gotPipeNotification(void *data)
 {
     char msg[4];
 
@@ -700,24 +700,39 @@ void qemuloopPipeHandler(void *data)
 
     if (!strncmp(msg, "FORK", 4)) {
 
-        afl_setup();
-        CPUArchState *env = cpu_env(first_cpu);
-
-        afl_forkserver(env);
-
-        dummy_start_vcpu_thread(first_cpu);
-        // Resume vcpu thread in child process
-        // QTAILQ_FIRST(&cpus_queue) = snapshot_cpu;
-        qemu_init_vcpu(first_cpu);
-        cpu_resume(first_cpu);
+        // afl_setup();
     }
 }
 
-void afl_setup(void)
-{
-    // rcu_disable_atfork();
-    return;
-}
+// void afl_setup(void)
+// {
+//     char *id_str = getenv(SHM_ENV_VAR),
+//         *inst_r = getenv("AFL_INST_RATIO");
+
+//     int shm_id;
+
+//     if (inst_r) {
+
+//         unsigned int r;
+
+//         r = atoi(inst_r);
+
+//         if (r > 100) r = 100;
+//         if (!r) r = 1;
+
+//         afl_inst_rms = MAP_SIZE * r / 100;
+
+//     }
+//     if (id_str) {
+//         shm_id = atoi(id_str);
+//         afl_area_ptr = shmat(shm_id, NULL, 0);
+//         if (afl_area_ptr == (void*)-1) exit(1);
+//         /* With AFL_INST_RATIO set to a low value, we want to touch the bitmap
+//         so that the parent doesn't give up on us. */
+//         if (inst_r) afl_area_ptr[0] = 1;
+//     }
+// }
+
 
 
 void cpu_stop_current(void)
