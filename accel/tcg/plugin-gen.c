@@ -989,9 +989,6 @@ void plugin_gen_insn_trans_spy(CPUState *cpu, const DisasContextBase *db)
     }
 }
 
-gboolean system_started = 0;
-gboolean forkserver_started = 0;
-gboolean afl_wants_cpu_to_stop = 0;
 QEMU_DISABLE_CFI
 void HELPER(syscall_spy)(CPUArchState *env)
 {

@@ -39,8 +39,9 @@
               "-M", "romulus-bmc",
               "-drive", "file=${KERN}/obmc-phosphor-image-romulus.static.mtd,if=mtd,format=raw",
               "-net", "nic",
-              "-net", "user,hostfwd=:127.0.0.1:2222-:22,hostfwd=:127.0.0.1:2443-:443,hostfwd=:127.0.0.1:18080-:8080,hostfwd=udp:127.0.0.1:2623-:623,hostname=qemu",
+              "-net", "user,hostfwd=:127.0.0.1:2222-:22,hostfwd=:127.0.0.1:2443-:443,hostfwd=:127.0.0.1:18080-:8080,hostfwd=:127.0.0.1:14817-:4817,hostname=qemu",
               "-d", "plugin",
+              "-plugin", "plugin_spy/build/libaflspy.so",
               "-D", "plugin_spy/test/qemu_log.txt",
               "-nographic"
           ],
@@ -61,16 +62,16 @@
               "text": "-enable-pretty-printing",
               "ignoreFailures": true
             },
-            {
-              "description": "设置GDB在fork后掌控子进程",
-              "text": "-gdb-set detach-on-fork off",
-              "ignoreFailures": true
-            },
-            {
-              "description": "设置GDB在fork后跟踪子进程",
-              "text": "-gdb-set follow-fork-mode child",
-              "ignoreFailures": true
-            }
+            // {
+            //   "description": "设置GDB在fork后掌控子进程",
+            //   "text": "-gdb-set detach-on-fork off",
+            //   "ignoreFailures": true
+            // },
+            // {
+            //   "description": "设置GDB在fork后跟踪子进程",
+            //   "text": "-gdb-set follow-fork-mode child",
+            //   "ignoreFailures": true
+            // }
           ]
       },
         {

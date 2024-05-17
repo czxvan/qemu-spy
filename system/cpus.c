@@ -654,13 +654,6 @@ int afl_qemuloop_pipe[2];
 void qemu_init_vcpu(CPUState *cpu)
 {
     // Set pipe fd handler to receive signals from the fn thread
-    if (!forkserver_started) {
-        if(pipe(afl_qemuloop_pipe) == -1) {
-            perror("pipe");
-            exit(1);
-        }
-        qemu_set_fd_handler(afl_qemuloop_pipe[0], gotPipeNotification, NULL, NULL);
-    }
     MachineState *ms = MACHINE(qdev_get_machine());
 
     cpu->nr_cores = machine_topo_get_cores_per_socket(ms);

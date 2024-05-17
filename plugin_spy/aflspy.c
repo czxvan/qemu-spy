@@ -22,21 +22,17 @@ void vcpu_insn_trans(qemu_plugin_id_t id,
     }
 }
 
-void vcpu_tb_exec_spy(qemu_plugin_id_t id,
-                        CPUState *cpu, CPUArchState *env,
-                        void *data)
+void vcpu_tb_exec_spy(qemu_plugin_id_t id, CPUState *cpu, CPUArchState *env, void *data)
 {
     TBInfo *info = (TBInfo *)data;
 
     static uint64_t count = 0;
     gboolean log_tb_exec_spy = LOG_MASK(false);
     gboolean log_coverage_info = LOG_MASK(false);
-
     if(is_trace_enabled()) {
-        // MEM_BARRIER();
         if (info->ctx == target_ctx && info->pc < 0x01000000) {
             count++;
-            afl_maybe_log(info->pc);
+            afl_maybe_log(info->pc); // used to record code execution info
             if (log_tb_exec_spy) {
                 LOG_STATEMENT("ctx: %08x  tb_exec pc: %08x\n"
                                 , info->ctx
@@ -88,9 +84,7 @@ void vcpu_exception_spy(qemu_plugin_id_t id,
     }
 }
 
-void vcpu_syscall_spy(qemu_plugin_id_t id,
-                            CPUState *cpu, CPUArchState *env,
-                            void *data)
+void vcpu_syscall_spy(qemu_plugin_id_t id, CPUState *cpu, CPUArchState *env, void *data)
 {
     SyscallInfo *info = (SyscallInfo *)data;
 
@@ -215,8 +209,8 @@ void vcpu_syscall_spy(qemu_plugin_id_t id,
         } break;
         case SEND: {
             if (system_started && info->ctx == target_ctx) {
-                if (spy_signal->next_step == 0 && is_trace_enabled()) {
-                    spy_signal->next_step = 1;
+                if (is_trace_enabled() && is_nextstep_zero()) {
+                    set_nextstep(1);
                     LOG_STATEMENT("Target SEND\n");
                 }
             }
@@ -246,8 +240,8 @@ void vcpu_syscall_spy(qemu_plugin_id_t id,
         } break;
         case SENDTO: {
             if (system_started && info->ctx == target_ctx) {
-                if (spy_signal->next_step == 0 && is_trace_enabled()) {
-                    spy_signal->next_step = 1;
+                if (is_trace_enabled() && is_nextstep_zero()) {
+                    set_nextstep(1);
                     LOG_STATEMENT("Target SENDTO\n");
                 }
             }
@@ -279,8 +273,8 @@ void vcpu_syscall_spy(qemu_plugin_id_t id,
         } break;
         case SENDMSG: {
             if (system_started && info->ctx == target_ctx) {
-                if (spy_signal->next_step == 0 && is_trace_enabled()) {
-                    spy_signal->next_step = 1;
+                if (is_trace_enabled() && is_nextstep_zero()) {
+                    set_nextstep(1);
                     LOG_STATEMENT("Target SENDMSG\n");
                 }
             }
@@ -393,13 +387,9 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
                                            const qemu_info_t *info, int argc,
                                            char **argv)
 {
-    QEMU_MODE = getenv("QEMU_MODE");
-    /* Register init, translation block and exit callbacks */
-    // qemu_plugin_register_vcpu_init_cb(id, vcpu_init);
-    // qemu_plugin_register_vcpu_tb_trans_cb(id, vcpu_tb_trans);
-    qemu_plugin_register_vcpu_insn_trans_cb(id, vcpu_insn_trans);
+    qemu_plugin_register_vcpu_insn_trans_cb(id, vcpu_insn_trans); // used to count insns
     qemu_plugin_register_vcpu_syscall_spy_cb(id, vcpu_syscall_spy);
     qemu_plugin_register_vcpu_tb_exec_spy_cb(id, vcpu_tb_exec_spy);
-    qemu_plugin_register_vcpu_exception_spy_cb(id, vcpu_exception_spy);
+    qemu_plugin_register_vcpu_exception_spy_cb(id, vcpu_exception_spy); // used to
     return 0;
 }

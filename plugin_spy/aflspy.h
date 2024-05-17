@@ -271,44 +271,57 @@ static inline void afl_maybe_log(uint32_t cur_loc) {
         return;
 
     // debug coverage
-    if (cur_loc > 0x00400000 && cur_loc < 0x00800000) {
+    // if (cur_loc > 0x00400000 && cur_loc < 0x00800000) {
         coverage_info[(cur_loc - 0x00400000) / 0x40] = 1;
         // trace_bits[(cur_loc - 0x00400000) / 0x40] = 1;
 
-        {
-            cur_loc = (cur_loc >> 4) ^ (cur_loc << 8);
-            cur_loc &= MAP_SIZE - 1;
+        // {
+        //     cur_loc = (cur_loc >> 4) ^ (cur_loc << 8);
+        //     cur_loc &= MAP_SIZE - 1;
 
-            if (cur_loc >= afl_inst_rms) return;
+        //     if (cur_loc >= afl_inst_rms) return;
 
-            trace_bits[cur_loc] = 1;
-        }
+        //     trace_bits[cur_loc] = 1;
+        // }
     
 
         {
-            // static  uint32_t prev_loc = 0;
+            static __thread uint32_t prev_loc = 0;
 
-            // cur_loc = (cur_loc >> 4) ^ (cur_loc << 8);
-            // cur_loc &= MAP_SIZE - 1;
+            cur_loc = (cur_loc >> 4) ^ (cur_loc << 8);
+            cur_loc &= MAP_SIZE - 1;
 
-            // /* Implement probabilistic instrumentation by looking at scrambled block
-            // address. This keeps the instrumented locations stable across runs. */
+            /* Implement probabilistic instrumentation by looking at scrambled block
+            address. This keeps the instrumented locations stable across runs. */
 
-            // if (cur_loc >= afl_inst_rms) return;
+            if (cur_loc >= afl_inst_rms) return;
 
-            // trace_bits[cur_loc ^ prev_loc]++;
-            // prev_loc = cur_loc >> 1;
+            trace_bits[cur_loc ^ prev_loc]++;
+            prev_loc = cur_loc >> 1;
         }
 
         
-    }
+    // }
 
 }
 
 static inline int is_trace_enabled(void) {
     MEM_BARRIER();
     return spy_signal && spy_signal->trace_enabled;
-    // return 1;
+}
+
+static inline int is_afl_spying(void) {
+    return spy_signal;
+}
+
+static inline int is_nextstep_zero() {
+    return spy_signal && (spy_signal->next_step == 0);
+}
+
+static inline void set_nextstep(uint8_t value) {
+    if (spy_signal) {
+        spy_signal->next_step = value;
+    }
 }
 
 static void set_agent_ctx(uint32_t ctx) {
